@@ -12,7 +12,14 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ConfiguredFlag = Join-Path $PSScriptRoot ".framework-configured"
-if (-not (Test-Path $ConfiguredFlag) -and -not $GameDir) {
+
+# Load cached GameDir if not provided
+if (-not $GameDir -and (Test-Path $ConfiguredFlag)) {
+    $GameDir = (Get-Content $ConfiguredFlag -Raw).Trim()
+    Write-Host "Using cached GameDir: $GameDir" -ForegroundColor DarkGray
+}
+
+if (-not $GameDir) {
     Write-Host "GameDir is required on first run. Please re-run providing -GameDir <path>" -ForegroundColor Red
     exit 1
 }
@@ -55,12 +62,11 @@ Set-Content (Join-Path $TargetDir "meta.tyd") $TydContent
 
 #5. ModFramework.csproj (only on first run)
 $FrameworkCsproj = Join-Path (Split-Path $PSScriptRoot) "ModFramework.csproj"
-$ConfiguredFlag = Join-Path $PSScriptRoot ".framework-configured"
 if (-not (Test-Path $ConfiguredFlag)) {
     $CsprojContent2 = Get-Content (Join-Path $TemplatesDir "ModFramework.csproj_template") -Raw
     $CsprojContent2 = $CsprojContent2 -replace '{GAME_DIRECTORY}', $GameDir
     Set-Content $FrameworkCsproj $CsprojContent2
-    New-Item -ItemType File -Path $ConfiguredFlag | Out-Null
+    Set-Content $ConfiguredFlag $GameDir
     Write-Host "Successfully mapped framework to Game Installation at $GameDir !" -ForegroundColor Green
 }
 

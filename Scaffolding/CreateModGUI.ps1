@@ -11,11 +11,12 @@ Add-Type -Name Win32 -Namespace Native -MemberDefinition '
 $ErrorActionPreference = "Stop"
 
 $ConfiguredFlag = Join-Path $PSScriptRoot ".framework-configured"
-$NeedsGameDir = -not (Test-Path $ConfiguredFlag)
 
-# Prompt for Game Directory via folder browser on first run
+# Load cached GameDir or prompt via folder browser on first run
 $GameDir = $null
-if ($NeedsGameDir) {
+if (Test-Path $ConfiguredFlag) {
+    $GameDir = (Get-Content $ConfiguredFlag -Raw).Trim()
+} else {
     $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
     $folderBrowser.Description = "Select the Software Inc game installation directory"
     $folderBrowser.ShowNewFolderButton = $false
@@ -69,12 +70,11 @@ Set-Content (Join-Path $TargetDir "meta.tyd") $TydContent
 
 #5. ModFramework.csproj (only on first run)
 $FrameworkCsproj = Join-Path (Split-Path $PSScriptRoot) "ModFramework.csproj"
-$ConfiguredFlag = Join-Path $PSScriptRoot ".framework-configured"
 if (-not (Test-Path $ConfiguredFlag)) {
     $CsprojContent2 = Get-Content (Join-Path $TemplatesDir "ModFramework.csproj_template") -Raw
     $CsprojContent2 = $CsprojContent2 -replace '{GAME_DIRECTORY}', $GameDir
     Set-Content $FrameworkCsproj $CsprojContent2
-    New-Item -ItemType File -Path $ConfiguredFlag | Out-Null
+    Set-Content $ConfiguredFlag $GameDir
     $config = "Successfully mapped framework to Game Installation at $GameDir !"
 }
 
