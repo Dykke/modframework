@@ -2,6 +2,19 @@
 
 ![Software Inc](https://img.shields.io/badge/Game-Software_Inc-blue?style=for-the-badge&logo=steam) ![Unity 2019.4](https://img.shields.io/badge/Unity-2019.4-black?style=for-the-badge&logo=unity) ![License](https://img.shields.io/badge/License-MIT-success?style=for-the-badge)
 
+📄 Third‑Party Library: Harmony
+Name: Harmony
+Author: Andreas Pardeike and contributors
+Repository: https://github.com/pardeike/Harmony
+License: MIT License
+Usage in This Project:
+ModFramework includes Harmony.dll as a bundled dependency to enable runtime patching, method interception, and mod interoperability. Harmony is used unmodified and redistributed solely for convenience so that end‑users and mod developers do not need to download it separately.
+License Notice:
+Harmony is distributed under the MIT License.
+A copy of the MIT License is included in this repository under:
+/Harmony/LICENSE
+Per the terms of the MIT License, the copyright notice and permission notice have been preserved.
+
 A complete UI, utility, and gameplay framework for building Software Inc mods.
 
 ### What is this and why use it?
