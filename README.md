@@ -24,7 +24,17 @@ Modding Software Inc UI traditionally required building tedious C# hierarchies o
 
 ## Quick Start - Create a New Mod (v5)
 
-The fastest way to start is with the scaffolding script:
+You can scaffold a new mod using either the CLI script or the GUI script.
+
+### Option 1: CLI
+
+Show CLI help (parameters, usage, examples):
+
+```powershell
+.\ModFramework\Scaffolding\CreateMod.ps1 -Help
+```
+
+Create a mod from CLI:
 
 ```powershell
 # First run - provide your game install path (cached for future runs)

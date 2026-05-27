@@ -9,6 +9,9 @@
 *.userosscache
 *.sln.docstates
 
+Visual Studio Code files
+.vscode/
+
 # Compiled files
 *.dll
 *.pdb
