@@ -1,24 +1,25 @@
-// =============================================================================
-// ModFramework - Reusable utilities for Software Inc modding
+// ============================================================================
+// ModFramework v5 - Slim utility layer for Software Inc modding
 // Created by: Zicarius
-// Version: 4.0
+// Version: 5.0
+// ============================================================================
 //
-// This file previously contained all framework code in a single 893-line file.
-// It has been split into organized modules for maintainability:
+// v5 strips all code redundant with the game's native API (Beta 1.8.36+).
+// UI is now built with WindowManager.GenerateUI() and XML files.
 //
-//   Core/ModLogger.cs       - Logging system (Log, Warn, Error, Success)
-//   Core/ModEvents.cs       - Pub/sub event system for mod communication
-//   Core/ModSettings.cs     - Disk-backed persistent settings store
-//   Core/ModUtils.cs        - Common utilities (formatting, singletons, etc.)
-//   Core/Notifications.cs   - In-game HUD notification popups
-//   Core/ModLifecycle.cs    - Safe game lifecycle hooks (v4)
-//   Core/ModSafety.cs       - Error safety wrappers (v4)
-//   Core/ModPatching.cs     - Harmony patch helpers (v4)
-//   GameData/               - Safe game data wrappers (v4)
-//   Scaffolding/            - New mod project generator (v4)
-//   UI/Vanilla/UIHelper.cs  - Legacy UI helpers wrapping WindowManager prefabs
-//   UI/Custom/              - Custom UI framework (31 components)
+// What's in v5:
+//   Core/ModSafety.cs      - Try/catch wrappers for safe mod execution
+//   Core/ModUtils.cs       - Formatting helpers and IsInGame() check
+//   GameData/              - Null-safe wrappers for Company, Employee, Market, Product data
+//   Harmony/0Harmony.dll   - Bundled Harmony 2.x for runtime patching
 //
-// All classes remain in the `ModFramework` namespace.
-// Existing mods using `using ModFramework;` require NO code changes.
-// =============================================================================
+// What was removed (use native API instead):
+//   ModLogger       -> Debug.Log("[YourMod] message")
+//   ModSettings     -> this.SaveSetting("key", value) / this.LoadSetting<T>("key", default)
+//   ModLifecycle    -> Subscribe to TimeOfDay.OnDayPassed, GameSettings.GameReady, etc. directly
+//   ModEvents       -> Subscribe to game events directly
+//   ModPatching     -> new Harmony("your.mod.id").PatchAll() directly
+//   Notifications   -> HUD.Instance.AddPopupMessage(...) directly
+//   All UI/Custom/* -> WindowManager.GenerateUI() with XML files
+//   UIHelper        -> WindowManager.GenerateUI() with XML files
+// ============================================================================

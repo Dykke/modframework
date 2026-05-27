@@ -1,0 +1,28 @@
+using UnityEngine;
+using ModFramework;
+
+namespace {MOD_NAME}
+{
+    public class {MOD_NAME}Meta : ModMeta
+    {
+        public override string Name
+        {
+            get { return "{MOD_NAME}"; }
+        }
+
+        public override void Initialize(ModController.DLLMod parentMod)
+        {
+            // (Optional) Initialize Harmony patching here if needed
+            // var harmony = new HarmonyLib.Harmony("com.yourname.{MOD_NAME}");
+            // harmony.PatchAll();
+
+            base.Initialize(parentMod);
+        }
+
+        public override void ConstructOptionsScreen(RectTransform parent, bool inGame)
+        {
+            // (Optional) Build options UI screen for this mod using ModFramework.UI
+            // or native WindowManager elements.
+        }
+    }
+}

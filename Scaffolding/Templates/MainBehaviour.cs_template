@@ -1,97 +1,75 @@
-using System;
 using UnityEngine;
-using ModFramework.Core;
-using ModFramework.GameData;
-
-// ============================================================================
-// {MOD_NAME} - Main Mod Entry Point
-// ============================================================================
-// This file is the main entry point for your mod. Software Inc will
-// automatically create an instance of this class when the game loads.
-//
-// HOW IT WORKS:
-//   1. Awake() runs once when your mod is first loaded.
-//   2. OnGameReady() runs when the player opens or loads a save.
-//   3. OnDayPassed() runs once per in-game day (great for periodic logic).
-//   4. OnGameExit() runs when the player returns to the main menu.
-//
-// IMPORTANT:
-//   - Do NOT put heavy logic in Awake(). It runs before the game is ready.
-//   - Use OnGameReady() to create windows, read company data, etc.
-//   - All lifecycle events are wrapped in try/catch, so one crash won't
-//     break the rest of the game.
-// ============================================================================
+using UnityEngine.UI;
+using System.Collections.Generic;
 
 namespace {MOD_NAME}
 {
     public class {MOD_NAME}Behaviour : ModBehaviour
     {
-        // =====================================================
-        // Step 1: Awake - Mod is loaded (game may not be ready)
-        // =====================================================
+        private Dictionary<string, Component> _uiElements;
+
+        // Called once when mod is first loaded
         private void Awake()
         {
-            // Set up logging prefix so all your log messages are tagged
-            ModLogger.SetPrefix("{MOD_NAME}");
-            ModSettings.SetPrefix("{MOD_NAME}");
+            Debug.Log("[{MOD_NAME}] Mod loaded.");
 
-            // Subscribe to lifecycle events
-            // These are safe - if the game isn't ready yet, they just wait
-            ModLifecycle.OnGameReady += OnGameReady;
-            ModLifecycle.OnDayPassed += OnDayPassed;
-            ModLifecycle.OnGameExit += OnGameExit;
-
-            // OPTIONAL: Apply Harmony patches (uncomment if needed)
-            // First check if Harmony is available on this setup
-            // if (ModPatching.IsHarmonyAvailable())
-            // {
-            //     ModPatching.PatchAll("com.yourname.{MOD_NAME}");
-            // }
-
-            ModLogger.Log("Mod loaded successfully!");
+            // OPTIONAL: Apply Harmony patches
+            // var harmony = new HarmonyLib.Harmony("com.zicarius.{MOD_NAME}");
+            // harmony.PatchAll();
         }
 
-        // =====================================================
-        // Step 2: OnGameReady - Player is in a game, data is safe to read
-        // =====================================================
-        private void OnGameReady()
+        // Called when the mod is activated (toggled on by player)
+        public override void OnActivate()
         {
-            ModLogger.Log("Game is ready! Initializing mod logic.");
-
-            // EXAMPLE: Read the player's company name
-            // var company = ModCompanyHelper.GetPlayerCompany();
-            // if (company != null)
+            Debug.Log("[{MOD_NAME}] Activated.");
+            // Example: Show a window if we are in-game (WindowManager.Instance is not null)
+            // if (WindowManager.Instance != null)
             // {
-            //     ModLogger.Log("Player company: " + company.Name);
+            //     ShowMainWindow();
             // }
-
-            // EXAMPLE: Create a UI window
-            // var window = ModFramework.UI.Custom.ModWindow.Create("My Window", 400, 300, singletonKey: "{MOD_NAME}_main");
-            // ModFramework.UI.Custom.ModLabel.Create("Hello from {MOD_NAME}!", window.ContentPanel);
-            // window.Show();
+            // Subscribe to game events
+            // TimeOfDay.OnDayPassed += OnDayPassed;
         }
 
-        // =====================================================
-        // Step 3: OnDayPassed - Runs once per in-game day
-        // =====================================================
-        private void OnDayPassed()
+        // Called when the mod is deactivated (toggled off by player)
+        public override void OnDeactivate()
         {
-            // EXAMPLE: Log the player's employee count on the 1st of each month
-            // var date = ModMarketHelper.GetCurrentDate();
-            // if (date.Day == 1)
-            // {
-            //     int count = ModEmployeeHelper.GetPlayerEmployeeCount();
-            //     ModLogger.Log("Monthly report: " + count + " employees");
-            // }
+            Debug.Log("[{MOD_NAME}] Deactivated.");
+            // Unsubscribe from game events
+            // TimeOfDay.OnDayPassed -= OnDayPassed;
         }
 
-        // =====================================================
-        // Step 4: OnGameExit - Player left the game, clean up
-        // =====================================================
-        private void OnGameExit()
-        {
-            ModLogger.Log("Cleaning up mod state.");
-            // Close windows, clear caches, etc.
-        }
+        // EXAMPLE: Create a window from XML
+        // private void ShowMainWindow()
+        // {
+        //     var nodes = ParentMod.LoadFullXMLFile("UI.xml");
+        //     _uiElements = WindowManager.GenerateUI(nodes, null, this);
+        // }
+
+        // EXAMPLE: XML button callback (referenced via onClick="OnButtonClicked()")
+        // public void OnButtonClicked()
+        // {
+        //     if (HUD.Instance != null)
+        //     {
+        //         HUD.Instance.AddPopupMessage("Button clicked!", "Check", PopupManager.NotificationSound.Neutral, 2f);
+        //     }
+        //     else
+        //     {
+        //         Debug.Log("[{MOD_NAME}] Button clicked! (HUD not available)");
+        //     }
+        // }
+
+        // EXAMPLE: XML combo callback (referenced via OnSelectedChanged="OnComboChanged(this)")
+        // public void OnComboChanged(GUICombobox combo)
+        // {
+        //     if (HUD.Instance != null)
+        //     {
+        //         HUD.Instance.AddPopupMessage($"Combo changed: {combo.SelectedItemString}", "Check", PopupManager.NotificationSound.Neutral, 2f);
+        //     }
+        //     else
+        //     {
+        //         Debug.Log($"[{{MOD_NAME}}] Combo changed: {combo.SelectedItemString}");
+        //     }
+        // }
     }
 }

@@ -19,6 +19,3 @@ Visual Studio Code files
 
 # Bundled dependencies (tracked)
 !Harmony/0Harmony.dll
-
-# Scaffolding cache (user-specific game install path)
-Scaffolding/.game-directory

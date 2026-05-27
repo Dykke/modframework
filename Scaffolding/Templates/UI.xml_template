@@ -1,0 +1,74 @@
+<Window MinSize="600,800" NonLocTitle="{MOD_NAME} - UI Gallery" anchor="middle,center">
+  <ScrollView anchor="fill" padding="8,8,8,8">
+    <VerticalLayout width="550" childForceExpandWidth="False" childForceExpandHeight="False" childControlHeight="False" childControlWidth="False" spacing="8" padding="12,12,12,12">
+      <ContentFitter verticalFit="PreferredSize"></ContentFitter>
+      <!-- Typography & Basic Elements -->
+      <Label width="550" height="60" fontSize="24">{MOD_NAME} UI Test</Label>
+      <Label width="550" height="40">Mod by Zicarius - Demonstrating all native UI elements</Label>
+      <Empty width="550" height="10"></Empty>
+      
+      <!-- Interactive Inputs -->
+      <Label width="550" height="24">Controls</Label>
+      <Button width="550" height="30" onClick="OnButtonClicked()">Click Me</Button>
+      <Input width="550" height="30">Default Text Input</Input>
+      <Checkbox width="550" height="30">Toggle Me</Checkbox>
+      <Combo width="550" height="30">Option A, Option B, Option C</Combo>
+      
+      <Empty width="550" height="10"></Empty>
+      
+      <!-- Sliders and Progress -->
+      <Label width="550" height="24">Indicators</Label>
+      <Slider width="550" height="20" minValue="0" maxValue="100" value="50"></Slider>
+      <Progressbar width="550" height="20" value="0.75"></Progressbar>
+      <Empty width="550" height="20">
+        <HorizontalLayout width="550" childForceExpandWidth="False" childControlWidth="False">
+          <Scrollbar width="150" height="20"></Scrollbar>
+        </HorizontalLayout>
+      </Empty>
+      
+      <Empty width="550" height="10"></Empty>
+      
+      <!-- Layouts & Panels -->
+      <Label width="550" height="24">Layouts and Panels</Label>
+      <Panel anchor="middle,center" width="550" height="60" color="808080">
+        <HorizontalLayout spacing="10" padding="5,5,5,5" childForceExpandWidth="False" childControlHeight="False" childControlWidth="False">
+          <Button width="100" height="30">Left</Button>
+          <Button width="100" height="30">Center</Button>
+          <Button width="100" height="30">Right</Button>
+        </HorizontalLayout>
+      </Panel>
+
+      <Empty width="550" height="10"></Empty>
+      
+      <Label width="550" height="24">Grid Layout</Label>
+      <Panel anchor="middle,center" width="550" height="100" color="808080">
+        <GridLayout cellSize="50,40" spacing="10,10" padding="5,5,5,5">
+          <Button>1</Button>
+          <Button>2</Button>
+          <Button>3</Button>
+          <Button>4</Button>
+          <Button>5</Button>
+          <Button>6</Button>
+        </GridLayout>
+      </Panel>
+
+      <Empty width="550" height="10"></Empty>
+
+      <!-- Advanced Elements -->
+      <Label width="550" height="24">Data Display</Label>
+      <List width="550" height="150" id="testList"></List>
+      
+      <Empty width="550" height="10"></Empty>
+
+      <!-- Images -->
+      <Label width="550" height="24">Visuals</Label>
+      <Empty width="550" height="60">
+        <HorizontalLayout width="550" spacing="10" childForceExpandWidth="False" childForceExpandHeight="False" childControlHeight="False" childControlWidth="False">
+          <Image color="FF0000" width="50" height="50"></Image>
+          <RawImage color="0000FF" width="50" height="50"></RawImage>
+        </HorizontalLayout>
+      </Empty>
+      
+    </VerticalLayout>
+  </ScrollView>
+</Window>

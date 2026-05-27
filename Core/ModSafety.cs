@@ -108,7 +108,6 @@ namespace ModFramework.Core
             {
                 string warning = $"[ModFramework] ASSERT FAILED: {message}";
                 Debug.LogWarning(warning);
-                ModLogger.LogWarning(warning);
             }
         }
 
@@ -116,7 +115,6 @@ namespace ModFramework.Core
         {
             string errorMessage = $"[ModFramework] ERROR in {context}:\n{ex.Message}\n{ex.StackTrace}";
             Debug.LogError(errorMessage);
-            ModLogger.Log(errorMessage); // Ensure it also goes to our custom log file 
         }
     }
 }
