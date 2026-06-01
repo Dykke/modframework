@@ -1,10 +1,16 @@
 using UnityEngine;
 using ModFramework;
+using HarmonyLib;
+using System;
+using System.IO;
+using System.Reflection;
 
 namespace {MOD_NAME}
 {
     public class {MOD_NAME}Meta : ModMeta
     {
+        public static bool GiveMeFreedom = true;
+     
         public override string Name
         {
             get { return "{MOD_NAME}"; }
@@ -12,8 +18,22 @@ namespace {MOD_NAME}
 
         public override void Initialize(ModController.DLLMod parentMod)
         {
+            // Resolve this mod's bundled dependencies (Harmony, ModFramework, etc.)
+            // from the "Dependencies" subfolder inside the mod's folder.
+            string dependenciesPath = Path.Combine(parentMod.FolderPath(), "Dependencies");
+            AppDomain.CurrentDomain.AssemblyResolve += (sender, args) =>
+            {
+                string assemblyName = new AssemblyName(args.Name).Name;
+                string candidate = Path.Combine(dependenciesPath, assemblyName + ".dll");
+                if (File.Exists(candidate))
+                {
+                    Debug.Log("[{MOD_NAME}] Resolving dependency: " + candidate);
+                    return Assembly.LoadFrom(candidate);
+                }
+                return null;
+            };
             // (Optional) Initialize Harmony patching here if needed
-            // var harmony = new HarmonyLib.Harmony("com.yourname.{MOD_NAME}");
+            // var harmony = new Harmony("com.yourname.{MOD_NAME}");
             // harmony.PatchAll();
 
             base.Initialize(parentMod);

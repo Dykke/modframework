@@ -12,6 +12,7 @@
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <Version>1.0</Version>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -40,7 +41,11 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="0Harmony">
-      <HintPath>..\ModFramework\Harmony\0Harmony.dll</HintPath>
+      <HintPath>{MODFRAMEWORK_BIN}\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ModFramework">
+      <HintPath>{MODFRAMEWORK_BIN}\ModFramework.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System" />
@@ -65,51 +70,6 @@
   <ItemGroup>
     <Compile Include="{MOD_NAME}Behaviour.cs" />
     <Compile Include="{MOD_NAME}Meta.cs" />
-    <!-- ModFramework Core -->
-    <Compile Include="..\ModFramework\ModFramework.cs">
-      <Link>ModFramework\ModFramework.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\Core\ModSafety.cs">
-      <Link>ModFramework\Core\ModSafety.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\Core\ModUtils.cs">
-      <Link>ModFramework\Core\ModUtils.cs</Link>
-    </Compile>
-    <!-- ModFramework GameData -->
-    <Compile Include="..\ModFramework\GameData\ModCompanyHelper.cs">
-      <Link>ModFramework\GameData\ModCompanyHelper.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\GameData\ModEmployeeHelper.cs">
-      <Link>ModFramework\GameData\ModEmployeeHelper.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\GameData\ModMarketHelper.cs">
-      <Link>ModFramework\GameData\ModMarketHelper.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\GameData\ModProductHelper.cs">
-      <Link>ModFramework\GameData\ModProductHelper.cs</Link>
-    </Compile>
-    <!-- ModFramework V5 UI -->
-    <Compile Include="..\ModFramework\UI\CustomAccordion.cs">
-      <Link>ModFramework\UI\CustomAccordion.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\UI\CustomCardLayout.cs">
-      <Link>ModFramework\UI\CustomCardLayout.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\UI\CustomCharts.cs">
-      <Link>ModFramework\UI\CustomCharts.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\UI\CustomContextMenu.cs">
-      <Link>ModFramework\UI\CustomContextMenu.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\UI\CustomNodeGraph.cs">
-      <Link>ModFramework\UI\CustomNodeGraph.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\UI\CustomSplitPane.cs">
-      <Link>ModFramework\UI\CustomSplitPane.cs</Link>
-    </Compile>
-    <Compile Include="..\ModFramework\UI\CustomUIParser.cs">
-      <Link>ModFramework\UI\CustomUIParser.cs</Link>
-    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Content Include="UI.xml">
@@ -121,12 +81,29 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
+    <ModFrameworkBin>$([System.IO.Path]::GetFullPath('{MODFRAMEWORK_BIN}'))</ModFrameworkBin>
     <PostBuildEvent>
 echo Copying DLL and XML to Local Mods Directory...
-mkdir "%25AppData%25\..\LocalLow\Coredumping\Software Inc\Mods\{MOD_NAME}"
-copy /Y "$(TargetDir)$(TargetName).dll" "%25AppData%25\..\LocalLow\Coredumping\Software Inc\Mods\{MOD_NAME}\$(TargetName).dll"
-copy /Y "$(ProjectDir)\meta.tyd" "%25AppData%25\..\LocalLow\Coredumping\Software Inc\Mods\{MOD_NAME}\meta.tyd"
-copy /Y "$(ProjectDir)\UI.xml" "%25AppData%25\..\LocalLow\Coredumping\Software Inc\Mods\{MOD_NAME}\UI.xml"
+mkdir "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}"
+mkdir "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\Dependencies"
+copy /Y "$(ModFrameworkBin)\0Harmony.dll" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\Dependencies\0Harmony.dll"
+copy /Y "$(ModFrameworkBin)\ModFramework.dll" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\Dependencies\ModFramework.dll"
+copy /Y "$(TargetDir)$(TargetName).dll" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\$(TargetName).dll"
+copy /Y "$(ProjectDir)\meta.tyd" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\meta.tyd"
+copy /Y "$(ProjectDir)\UI.xml" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\UI.xml"
     </PostBuildEvent>
   </PropertyGroup>
+  <Target Name="PackageMod" AfterTargets="Build">
+    <Message Text="Packaging mod into {MOD_NAME} $(Version).zip" Importance="high" />
+    <Exec Command="
+      echo Packaging mod...
+      set MODPATH={GAME_DIRECTORY}\DLLMods\{MOD_NAME}
+      set ZIPDIR=$(ProjectDir)\Packages
+      if not exist &quot;%ZIPDIR%&quot; mkdir &quot;%ZIPDIR%&quot;
+      set ZIPPATH=%ZIPDIR%\{MOD_NAME} V$(Version).zip
+      if exist &quot;%ZIPPATH%&quot; del &quot;%ZIPPATH%&quot;
+      powershell -NoLogo -NoProfile -Command &quot;Compress-Archive -Path '%MODPATH%' -DestinationPath '%ZIPPATH%' -Force&quot;
+      echo Mod packaged into %ZIPPATH%
+    " />
+  </Target>
 </Project>

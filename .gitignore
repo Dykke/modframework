@@ -17,5 +17,9 @@ Visual Studio Code files
 *.pdb
 *.cache
 
+# Generated flag files
+.game-directory
+.modframework-built
+
 # Bundled dependencies (tracked)
 !Harmony/0Harmony.dll
