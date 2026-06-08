@@ -351,12 +351,12 @@ function Show-NextSteps {
     if ($IsModFrameworkBuilt) {
         Write-Host "Next Steps:" -ForegroundColor Green
         Write-Host "1. Add existing project $ModName.csproj to your Visual Studio Solution."
-        Write-Host "2. Build your new mod. The post-build event will automatically copy it to your local game's Mods folder."
+        Write-Host "2. Build your new mod. The post-build event will automatically copy it to your local game's Mods folder and package it into a ZIP file."
     } else {
         Write-Host "Next Steps:"
         Write-Host "1. Add existing project $ModName.csproj to your Visual Studio Solution."
         Write-Host "2. Make sure ModFramework is built."
-        Write-Host "3. Build your new mod. The post-build event will automatically copy it to your local game's Mods folder."
+        Write-Host "3. Build your new mod. The post-build event will automatically copy it to your local game's Mods folder and package it into a ZIP file."
     }
 
     Write-Host ""
@@ -434,12 +434,12 @@ $ModName = Resolve-ModName -InitialValue $ModName
 $ConfigFile = Join-Path $PSScriptRoot ".game-directory"
 $IsFirstRun = -not (Test-Path $ConfigFile)
 $BuildFile = Join-Path $PSScriptRoot ".modframework-built"
-$ModFrameworkDll = Join-Path (Split-Path $PSScriptRoot) "bin\Release\ModFramework.dll"
+$ModFrameworkBin = Join-Path (Split-Path $PSScriptRoot) "bin\Release"
 $SkippedBuild = $false
 $BuildPromptShown = $false
 $ModFrameworkCsprojUpdated = $false
 
-if (Test-Path $ModFrameworkDll) {
+if (Test-Path (Join-Path $ModFrameworkBin "ModFramework.dll")) {
     Set-Content $BuildFile $true -Encoding UTF8
 }
 
@@ -463,8 +463,10 @@ if ($IsFirstRun -or $PSBoundParameters.ContainsKey('GameDir')) {
     $RootCsprojPath = Join-Path $RootDir "ModFramework.csproj"
 
     if (Test-Path $CsprojTemplate) {
-        $CsprojContent = (Get-Content $CsprojTemplate -Raw).Replace('{GAME_DIRECTORY}', $GameDir)
-        Set-Content $RootCsprojPath $CsprojContent -Encoding UTF8
+        Set-TemplatedFile `
+            -TemplatePath $CsprojTemplate `
+            -OutputPath $RootCsprojPath `
+            -Tokens @{ GAME_DIRECTORY = $GameDir }
         $ModFrameworkCsprojUpdated = $true
         Write-Host "Updated ModFramework.csproj with game directory: $GameDir" -ForegroundColor Green
 
@@ -501,39 +503,53 @@ New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
 
 $Guid = [guid]::NewGuid().ToString().ToUpper()
 
+if (-not $ModDir) {
+    $ModFrameworkBin = Join-Path ".." (Join-Path (Split-Path -Leaf (Split-Path $PSScriptRoot)) "bin\Release")
+}
+
 Write-Host "Copying templates..."
 # 1. Main Behaviour
-$BehaviourContent = Get-Content (Join-Path $TemplatesDir "MainBehaviour.cs_template") -Raw
-$BehaviourContent = $BehaviourContent.Replace('{MOD_NAME}', $ModName)
-Set-Content (Join-Path $TargetDir "${ModName}Behaviour.cs") $BehaviourContent -Encoding UTF8
+Set-TemplatedFile `
+    -TemplatePath (Join-Path $TemplatesDir "MainBehaviour.cs_template") `
+    -OutputPath (Join-Path $TargetDir "${ModName}Behaviour.cs") `
+    -Tokens @{ MOD_NAME = $ModName }
 
 # 2. ModMeta (required by Software Inc DLL loader)
-$MetaContent = Get-Content (Join-Path $TemplatesDir "MainMeta.cs_template") -Raw
-$MetaContent = $MetaContent.Replace('{MOD_NAME}', $ModName)
-Set-Content (Join-Path $TargetDir "${ModName}Meta.cs") $MetaContent -Encoding UTF8
+Set-TemplatedFile `
+    -TemplatePath (Join-Path $TemplatesDir "MainMeta.cs_template") `
+    -OutputPath (Join-Path $TargetDir "${ModName}Meta.cs") `
+    -Tokens @{ MOD_NAME = $ModName }
 
 # 3. .csproj (with game directory substitution)
-$CsprojContent = Get-Content (Join-Path $TemplatesDir "Mod.csproj_template") -Raw
-$CsprojContent = $CsprojContent.Replace('{MOD_NAME}', $ModName)
-$CsprojContent = $CsprojContent.Replace('{NEW_GUID}', $Guid)
-$CsprojContent = $CsprojContent.Replace('{GAME_DIRECTORY}', $GameDir)
-Set-Content (Join-Path $TargetDir "${ModName}.csproj") $CsprojContent -Encoding UTF8
+Set-TemplatedFile `
+    -TemplatePath (Join-Path $TemplatesDir "Mod.csproj_template") `
+    -OutputPath (Join-Path $TargetDir "${ModName}.csproj") `
+    -Tokens @{
+        MOD_NAME = $ModName
+        NEW_GUID = $Guid
+        GAME_DIRECTORY = $GameDir
+        MODFRAMEWORK_BIN = $ModFrameworkBin
+    }
 
 # 4. meta.tyd (required by Software Inc for mod discovery)
-$TydContent = Get-Content (Join-Path $TemplatesDir "meta.tyd_template") -Raw
-$TydContent = $TydContent.Replace('{MOD_NAME}', $ModName)
-Set-Content (Join-Path $TargetDir "meta.tyd") $TydContent -Encoding UTF8
+Set-TemplatedFile `
+    -TemplatePath (Join-Path $TemplatesDir "meta.tyd_template") `
+    -OutputPath (Join-Path $TargetDir "meta.tyd") `
+    -Tokens @{ MOD_NAME = $ModName }
 
 # 5. UI.xml (starter XML for native UI)
-$UIContent = Get-Content (Join-Path $TemplatesDir "UI.xml_template") -Raw
-$UIContent = $UIContent.Replace('{MOD_NAME}', $ModName)
-Set-Content (Join-Path $TargetDir "UI.xml") $UIContent -Encoding UTF8
+Set-TemplatedFile `
+    -TemplatePath (Join-Path $TemplatesDir "UI.xml_template") `
+    -OutputPath (Join-Path $TargetDir "UI.xml") `
+    -Tokens @{ MOD_NAME = $ModName }
 
-Write-Host ""
-Write-Host "Successfully generated '$ModName' at $TargetDir !" -ForegroundColor Green
-Write-Host "Game references point to: $GameDir" -ForegroundColor Green
-Write-Host ""
-Write-Host "Next Steps:"
-Write-Host "1. Add existing project $ModName.csproj to your Visual Studio Solution."
-Write-Host "2. Build your new mod. The post-build event will automatically copy it to your local game's Mods folder."
-Write-Host ""
+Write-Host "Mod $ModName generated successfully" -ForegroundColor Green
+if ($Build) {
+    if (-not (Invoke-ModFrameworkBuild -ProjectRoot (Split-Path $PSScriptRoot) -BuildFile $BuildFile)) {
+        $SkippedBuild = $true
+    }
+} else {
+    PromptBuild -ProjectRoot (Split-Path $PSScriptRoot) -BuildFile $BuildFile -SkippedBuild ([ref]$SkippedBuild) -BuildPromptShown ([ref]$BuildPromptShown) -NonInteractive:$NonInteractive
+}
+Show-Summary -ModName $ModName -TargetDir $TargetDir -GameDir $GameDir -IsModFrameworkBuilt (Test-Path $BuildFile) -ModFrameworkBin $ModFrameworkBin -ModFrameworkCsprojUpdated $ModFrameworkCsprojUpdated
+Show-NextSteps -IsModFrameworkBuilt (Test-Path $BuildFile) -ModName $ModName
