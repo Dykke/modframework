@@ -7,18 +7,38 @@ A complete UI, utility, and gameplay framework for building Software Inc mods.
 ### What is this and why use it?
 Modding Software Inc UI traditionally required building tedious C# hierarchies or fighting with Unity's UI systems.
 
-**ModFramework v5** solves this by providing:
+**ModFramework v5.1** solves this by providing:
 - **Native XML Parsing Integration** - Instead of building UI in C#, write simple `UI.xml` files and let the game's engine render them instantly.
 - **Custom XML Tags** - Extends the game's parser to support complex widgets like `<accordion>`, `<splitpane>`, `<cardlayout>`, `<piechart>`, `<barchart>`, `<linechart>`, and `<nodegraph>`.
 - **Game Data Wrappers** - Safely read company, product, employee, and market data without null references.
 - **Error Safety** - Tools that prevent your mod from crashing the game.
-- **Harmony Helpers** - Bundle and inject Harmony easily.
+- **Dependency Verification** - Declare required files/mods and show a friendly dialog if they're missing. (NEW in v5.1)
+- **Safe File I/O** - Read/write JSON (with full Dictionary and property support) and text without throwing. (NEW in v5.1)
+- **Mod Discovery** - Ask "is mod X loaded?" at runtime without reflection. (NEW in v5.1)
+- **Centralized Harmony** - Clean wrapper for the `new Harmony(...).PatchAll()` pattern with a single mod-friendly API. (NEW in v5.1)
+- **Single-DLL Distribution** - In Release builds, `0Harmony.dll` and `Newtonsoft.Json.dll` are ILMerged into `ModFramework.dll` so your mod ships as one file. (NEW in v5.1)
 - **Project Scaffolding** - Create a new mod project in 30 seconds.
 
 **Namespace:** `ModFramework.UI` (UI) / `ModFramework.Core` (utilities) / `ModFramework.GameData` (data wrappers)
 **Requires:** Unity 2019.4 (game's engine), .NET Framework 4.8
-**Dependencies:** Harmony 2.4.1 (bundled, MIT license)
+**Dependencies:** Harmony 2.x (ILMerged), Newtonsoft.Json 13.x (ILMerged) — both shipped inside `ModFramework.dll` for Release builds
 **License:** MIT - Free to use in any Software Inc mod
+
+---
+
+## What's new in v5.1
+
+| Module | What it does |
+|---|---|
+| `ModFramework.Core.ModDependencies` | Declare required files/mods, verify on init, show a friendly in-game dialog if anything's missing, get a `bool` back so your `Initialize` can short-circuit. |
+| `ModFramework.Core.ModFileAccess` | `WriteJson<T>`, `ReadJson<T>`, `TryReadJson<T>`, `ReadText`, `WriteText`, `ReadBytes`, `WriteBytes`, `GetModDataPath(...)`, `Exists`, `Delete`, `EnsureDirectory`. Uses Newtonsoft.Json so Dictionaries, HashSets, and properties all work. |
+| `ModFramework.Core.ModLoader` | `IsModLoaded("X")`, `FindMod("X")`, `GetAllLoadedModNames()`, `GetModFolder("X", relativeTo)`. |
+| `ModFramework.Core.ModHarmony` | `CreateAndPatchAll("com.you.modid")`, `UnpatchAll(harmony)`, `PatchCount(harmony)`. |
+| **ILMerge step** | Release builds merge `0Harmony.dll` + `Newtonsoft.Json.dll` into `ModFramework.dll`. Mods ship one file. See `Tools/ilmerge/README.md`. |
+| `Vendor/Newtonsoft.Json.dll` | New in v5.1. MIT-licensed. Pinned to 13.0.3. |
+| `Tools/ilmerge/` | Holds the optional ILMerge.exe. See `Tools/ilmerge/README.md` for setup. |
+
+See [cursor-stuff/modframework-v5.1-plan.md](cursor-stuff/modframework-v5.1-plan.md) for the full design plan.
 
 ---
 
@@ -125,11 +145,19 @@ For the complete setup guide, full XML API reference, and Game Data Wrappers, pl
 
 ### Harmony
 
-This project bundles [Harmony](https://github.com/pardeike/Harmony) v2.4.1 by Andreas Pardeike for runtime method patching.
+This project bundles [Harmony](https://github.com/pardeike/Harmony) v2.x by Andreas Pardeike for runtime method patching.
 
 **License:** MIT
 **Copyright:** (c) 2017 Andreas Pardeike
 **Full license:** [Harmony/LICENSE](Harmony/LICENSE)
+
+### Newtonsoft.Json
+
+This project bundles [Newtonsoft.Json](https://www.newtonsoft.com/json) v13.0.3 by James Newton-King for JSON serialization. ILMerged into `ModFramework.dll` in Release builds.
+
+**License:** MIT
+**Copyright:** (c) 2008 James Newton-King
+**Full license:** [Vendor/LICENSE.txt](Vendor/LICENSE.txt)
 
 ---
 

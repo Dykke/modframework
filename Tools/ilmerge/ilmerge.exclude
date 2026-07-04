@@ -1,0 +1,14 @@
+# ILMerge exclude file
+#
+# Lines starting with '#' are comments. Other lines are treated as regex
+# patterns matched against the FULL type name (namespace + name) of types
+# in the merged assemblies. Matching types are marked `internal` in the
+# output assembly, which keeps the public API surface of ModFramework clean.
+#
+# By default, leave this file EMPTY — ILMerge will then keep all merged
+# types public, which is what we want for the `HarmonyLib` and
+# `Newtonsoft.Json` namespaces (mods need to call into them).
+
+# Examples (uncomment to use):
+# ^HarmonyLib\.AccessTools$    ← keep only this Harmony type public; hide the rest
+# ^Newtonsoft\.Json\.Schema$   ← hide the JSON Schema types (we don't use them)

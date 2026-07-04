@@ -1083,3 +1083,199 @@ License: MIT | Copyright (c) 2017 Andreas Pardeike | Full text: [Harmony/LICENSE
 - **v3.0** (March 2026) - Complete Custom UI system (31 files), replaced legacy UIHelper as primary UI approach, added Resize, Hotkeys, and Node Graphs
 - **v2.0** (October 2025) - Core split into 5 files, added UIHelper
 - **v1.0** (September 2025) - Initial single-file ModFramework.cs
+
+---
+---
+
+# v5.1 New Modules - TechFrontier Support
+
+v5.1 adds four runtime helper classes to `ModFramework.Core` and merges Harmony + Newtonsoft.Json into a single `ModFramework.dll` so your mod ships as **one file**.
+
+All new code lives in `ModFramework/Core/`. All new code is **additive** - existing v5.0 mods work unchanged.
+
+## ModDependencies
+
+Declare which files, folders, or other mods your code needs. Missing required deps produce an in-game dialog and return `false` from `VerifyOrWarn` so you can short-circuit your `Initialize()`.
+
+```csharp
+using ModFramework.Core;
+
+public override void Initialize(ModController.DLLMod parentMod)
+{
+    bool ok = ModDependencies.VerifyOrWarn(parentMod,
+        new ModDependency {
+            Name = "0Harmony.dll",
+            Kind = ModDependencyKind.File,
+            Severity = ModDependencySeverity.Required,
+            DownloadUrl = "https://github.com/pardeike/Harmony"
+        },
+        new ModDependency {
+            Name = "SomeOtherMod",
+            Kind = ModDependencyKind.Mod,
+            Severity = ModDependencySeverity.Optional  // log only, no dialog
+        }
+    );
+
+    if (!ok) {
+        Debug.LogWarning("[MyMod] Skipping - missing dependencies.");
+        return;
+    }
+    // ...normal init...
+}
+```
+
+`ModDependencyKind` options: `File`, `Folder`, `Mod`, `ManagedAssembly`.
+`ModDependencySeverity` options: `Required`, `Optional`.
+
+For `File` and `Folder` kinds, the framework searches:
+1. `<modFolder>/Dependencies/<Name>` (Steam-Workshop convention)
+2. `<modFolder>/<Name>`
+3. `<GameRoot>/Software Inc_Data/Managed/<Name>` (game's Managed folder)
+
+## ModFileAccess
+
+Safe file I/O. All methods are **non-throwing** - they log a warning and return `false` / `null` / `default` on failure. JSON uses Newtonsoft.Json (ILMerged), so `Dictionary<,>`, `HashSet<>`, and properties all work.
+
+```csharp
+using ModFramework.Core;
+using System.Collections.Generic;
+
+public class MyModState {
+    public int Version = 1;
+    public Dictionary<string, int> Counters = new Dictionary<string, int>();
+    public string LastSave = "";
+}
+
+public override void OnActivate()
+{
+    string path = ModFileAccess.GetModDataPath(ParentMod, "state.json");
+    MyModState state = ModFileAccess.TryReadJson<MyModState>(path, out bool ok);
+    if (!ok) state = new MyModState();
+    _state = state;
+}
+
+public override void OnDeactivate()
+{
+    string path = ModFileAccess.GetModDataPath(ParentMod, "state.json");
+    ModFileAccess.WriteJson(path, _state);
+}
+```
+
+Path helpers:
+- `ModFileAccess.GetModFolder(parentMod)` - mod root
+- `ModFileAccess.GetModDataPath(parentMod, "sub", "file.json")` - `<modRoot>/Data/sub/file.json`, auto-creates parent
+- `ModFileAccess.GetManagedFolder()` - `<game>/Software Inc_Data/Managed`
+- `ModFileAccess.GetGameRoot()` - game's install root
+
+Other ops: `Exists`, `DirectoryExists`, `EnsureDirectory`, `ReadText`, `WriteText`, `AppendText`, `ReadBytes`, `WriteBytes`, `Delete`, `DeleteIfExists`, `ToJsonString<T>` (no I/O, just serialization).
+
+## ModLoader
+
+Ask questions about other mods at runtime, no reflection required.
+
+```csharp
+if (ModLoader.IsModLoaded("SomeOtherMod")) {
+    var other = ModLoader.FindMod("SomeOtherMod");
+    string folder = ModLoader.GetModFolder("SomeOtherMod", ParentMod);
+    Debug.Log($"SomeOtherMod is at {folder}");
+}
+
+foreach (var name in ModLoader.GetAllLoadedModNames()) {
+    Debug.Log($"Loaded mod: {name}");
+}
+```
+
+## ModHarmony
+
+Centralized Harmony wrapper with clean unpatch support.
+
+```csharp
+private HarmonyLib.Harmony _harmony;
+
+public override void Initialize(ModController.DLLMod parentMod)
+{
+    _harmony = ModHarmony.CreateAndPatchAll("com.yourname.yourmod");
+}
+
+public override void OnDeactivate()
+{
+    ModHarmony.UnpatchAll(_harmony);
+}
+```
+
+The patcher-id is auto-normalized: `"yourmod"` becomes `"com.yourmod"`.
+
+## ILMerge - Single-DLL Distribution
+
+In Release builds, the post-build step in `ModFramework.csproj` merges `0Harmony.dll` and `Newtonsoft.Json.dll` INTO `ModFramework.dll`. The standalone DLLs are removed from `bin\Release\`.
+
+**Setup (one-time):** drop `ILMerge.exe` into `Tools/ilmerge/`. See `Tools/ilmerge/README.md` for instructions.
+
+After ILMerge is set up:
+- Mods only reference `ModFramework.dll`
+- No `Dependencies/` folder in the mod's install dir
+- Steam Workshop publishing is single-DLL safe
+
+**Skipping ILMerge** (e.g. while iterating on the framework itself): build with `Debug` configuration, or set `<ILMergeEnabled>false</ILMergeEnabled>` in the .csproj. The build still succeeds, but the mod will need to ship `0Harmony.dll` and `Newtonsoft.Json.dll` separately.
+
+## Updated Scaffolding Templates
+
+`CreateMod.ps1` now generates a `Mod.csproj` that:
+- Only references `ModFramework.dll` (not `0Harmony.dll`)
+- Does not create a `Dependencies/` folder in the post-build step
+- The generated `Meta.cs` calls `ModDependencies.VerifyOrWarn(...)`
+- The generated `Behaviour.cs` shows `ModFileAccess`/`ModLoader` examples
+
+## Backward Compatibility
+
+- v5.0 mods work unchanged - v5.1 is purely additive
+- v5.0 mods that ship `0Harmony.dll` separately continue to work; the framework's `AppDomain.AssemblyResolve` no longer needs to be patched in mod code (Harmony is now inside `ModFramework.dll`)
+- `using ModFramework.Core;` is the only new import required
+
+## File Layout After v5.1
+
+```
+ModFramework/
++- ModFramework.cs              # v5.1 header comment
++- ModFramework.csproj          # +Newtonsoft.Json ref, +ILMerge target
++- Build-ModFramework.ps1       # NEW - standalone build + ILMerge script
++- README.md                    # v5.1 section added
++- DOCUMENTATION.md             # this file
+|
++- Core/
+|  +- ModSafety.cs
+|  +- ModUtils.cs
+|  +- ModDependencies.cs       # NEW
+|  +- ModFileAccess.cs         # NEW
+|  +- ModLoader.cs             # NEW
+|  \- ModHarmony.cs            # NEW
+|
++- GameData/                    # unchanged
++- UI/                          # unchanged
+|
++- Harmony/
+|  \- 0Harmony.dll
+|
++- Vendor/                      # NEW in v5.1
+|  +- Newtonsoft.Json.dll      # 13.0.3
+|  +- Newtonsoft.Json.xml
+|  +- LICENSE.txt              # MIT
+|  \- README.md
+|
++- Tools/                       # NEW in v5.1
+|  +- README.md
+|  \- ilmerge/
+|     +- README.md            # Setup instructions
+|     \- ilmerge.exclude      # (empty by default)
+|
+\- Scaffolding/
+   +- CreateMod.ps1            # unchanged
+   +- CreateModGUI.ps1         # unchanged
+   \- Templates/
+      +- MainMeta.cs_template     # v5.1: uses ModDependencies + ModHarmony
+      +- MainBehaviour.cs_template # v5.1: uses ModFileAccess + ModLoader
+      +- Mod.csproj_template      # v5.1: no 0Harmony ref
+      +- meta.tyd_template
+      +- UI.xml_template
+      \- MainMeta.cs.guide
+```

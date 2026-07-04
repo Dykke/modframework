@@ -65,11 +65,19 @@
       <HintPath>Harmony\0Harmony.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>Vendor\Newtonsoft.Json.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ModFramework.cs" />
     <Compile Include="Core\ModSafety.cs" />
     <Compile Include="Core\ModUtils.cs" />
+    <Compile Include="Core\ModDependencies.cs" />
+    <Compile Include="Core\ModFileAccess.cs" />
+    <Compile Include="Core\ModLoader.cs" />
+    <Compile Include="Core\ModHarmony.cs" />
     <Compile Include="GameData\ModCompanyHelper.cs" />
     <Compile Include="GameData\ModEmployeeHelper.cs" />
     <Compile Include="GameData\ModMarketHelper.cs" />
@@ -85,5 +93,46 @@
   <ItemGroup>
     <Folder Include="Properties\" />
   </ItemGroup>
+  <!--
+    ====================================================================
+    ILMerge post-build step
+    ====================================================================
+    Merges 0Harmony.dll and Newtonsoft.Json.dll INTO ModFramework.dll so
+    that mods can ship a single DLL (no Dependencies folder, Steam-Workshop
+    safe).
+
+    To enable:
+      1. Download ILMerge from
+         https://www.nuget.org/packages/ilmerge/
+         (extract ILMerge.exe to Tools/ilmerge/ILMerge.exe)
+      2. Set <ILMergePath>Tools\ilmerge\ILMerge.exe</ILMergePath> below
+         or define it as an environment variable.
+
+    To skip ILMerge (e.g. while developing the framework itself), delete
+    this <Target> block or set <ILMergeEnabled>false</ILMergeEnabled>.
+
+    After ILMerge runs, the standalone 0Harmony.dll and Newtonsoft.Json.dll
+    in $(OutDir) are removed — the merged ModFramework.dll is the only
+    output.
+
+    NOTE: Mods built against the merged ModFramework.dll do NOT need to
+    reference 0Harmony.dll or Newtonsoft.Json.dll. They just reference
+    ModFramework.dll and everything Just Works.
+    ====================================================================
+  -->
+  <PropertyGroup>
+    <ILMergeEnabled Condition=" '$(ILMergeEnabled)' == '' ">true</ILMergeEnabled>
+    <ILMergePath Condition=" '$(ILMergePath)' == '' ">$(MSBuildProjectDirectory)\Tools\ilmerge\ILMerge.exe</ILMergePath>
+  </PropertyGroup>
+  <Target Name="ILMergeAssemblies" AfterTargets="Build" Condition="'$(ILMergeEnabled)' == 'true' AND Exists('$(ILMergePath)') AND '$(Configuration)' == 'Release'">
+    <Message Text="=== ILMerge step: merging 0Harmony and Newtonsoft.Json INTO ModFramework.dll ===" Importance="high" />
+    <Exec Command="&quot;$(ILMergePath)&quot; /out:&quot;$(OutDir)ModFramework.dll&quot; /targetplatform:v4 /internalize:&quot;$(MSBuildProjectDirectory)\Tools\ilmerge\ilmerge.exclude&quot; /nologo &quot;$(OutDir)ModFramework.dll&quot; &quot;$(OutDir)0Harmony.dll&quot; &quot;$(OutDir)Newtonsoft.Json.dll&quot;" />
+    <Delete Files="$(OutDir)0Harmony.dll" />
+    <Delete Files="$(OutDir)Newtonsoft.Json.dll" />
+    <Message Text="=== ILMerge complete. ModFramework.dll is the single shippable artifact. ===" Importance="high" />
+  </Target>
+  <Target Name="ILMergeWarning" AfterTargets="Build" Condition="'$(ILMergeEnabled)' == 'true' AND '$(Configuration)' == 'Release' AND !Exists('$(ILMergePath)')">
+    <Warning Text="ILMerge is enabled but ILMerge.exe was not found at $(ILMergePath). Skipping merge — output will be multi-DLL. See Tools/ilmerge/README.md for setup." />
+  </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

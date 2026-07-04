@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
+using ModFramework;
+using ModFramework.Core;
 using System.Collections.Generic;
 
 namespace {MOD_NAME}
@@ -8,33 +10,86 @@ namespace {MOD_NAME}
     {
         private Dictionary<string, Component> _uiElements;
 
+        // OPTIONAL: hold a reference to the Harmony instance so we can
+        // unpatch cleanly on deactivation. Created in {MOD_NAME}Meta.Initialize().
+        // private HarmonyLib.Harmony _harmony;
+
+        // OPTIONAL: example saved-data class. Notice it can use a Dictionary<>
+        // and properties — both supported by Newtonsoft.Json, which is
+        // ILMerged into ModFramework.dll.
+        // [System.Serializable]
+        // public class MyModState
+        // {
+        //     public int Version = 1;
+        //     public string LastLoadedSave = "";
+        //     public Dictionary<string, int> Counters = new Dictionary<string, int>();
+        // }
+
         // Called once when mod is first loaded
         private void Awake()
         {
             Debug.Log("[{MOD_NAME}] Mod loaded.");
 
-            // OPTIONAL: Apply Harmony patches
-            // var harmony = new HarmonyLib.Harmony("com.zicarius.{MOD_NAME}");
-            // harmony.PatchAll();
+            // OPTIONAL: Harmony is normally patched in {MOD_NAME}Meta.Initialize().
+            // Leave this commented out unless you need a second Harmony instance.
+            // _harmony = ModHarmony.CreateAndPatchAll("com.yourname.{MOD_NAME}.behaviour");
         }
 
         // Called when the mod is activated (toggled on by player)
         public override void OnActivate()
         {
             Debug.Log("[{MOD_NAME}] Activated.");
+
+            // ---------------------------------------------------------------
+            // Soft-dependency re-check (Q2 decision).
+            //
+            // Hard-required deps are checked in {MOD_NAME}Meta.Initialize.
+            // Re-check optional ones here so we can warn when the player
+            // activates the mod without something it could benefit from.
+            // ---------------------------------------------------------------
+            ModDependencies.VerifyOrWarn(ParentMod,
+                new ModDependency
+                {
+                    Name = "SomeOptionalMod",
+                    Kind = ModDependencyKind.Mod,
+                    Severity = ModDependencySeverity.Optional
+                }
+            );
+
             // Example: Show a window if we are in-game (WindowManager.Instance is not null)
             // if (WindowManager.Instance != null)
             // {
             //     ShowMainWindow();
             // }
+
             // Subscribe to game events
             // TimeOfDay.OnDayPassed += OnDayPassed;
+
+            // ---------------------------------------------------------------
+            // EXAMPLE: Load your mod's saved data.
+            //
+            // ModFileAccess.GetModDataPath() returns <modFolder>/Data/<sub...>
+            // ReadJson<T>() uses Newtonsoft.Json (ILMerged into ModFramework).
+            // ---------------------------------------------------------------
+            // string statePath = ModFileAccess.GetModDataPath(ParentMod, "state.json");
+            // MyModState state = ModFileAccess.TryReadJson<MyModState>(statePath, out bool ok);
+            // if (!ok) state = new MyModState();
         }
 
         // Called when the mod is deactivated (toggled off by player)
         public override void OnDeactivate()
         {
             Debug.Log("[{MOD_NAME}] Deactivated.");
+
+            // ---------------------------------------------------------------
+            // EXAMPLE: Save your mod's state on deactivation.
+            // ---------------------------------------------------------------
+            // string statePath = ModFileAccess.GetModDataPath(ParentMod, "state.json");
+            // ModFileAccess.WriteJson(statePath, _state);
+
+            // Unpatch Harmony so we leave the game in a clean state.
+            // ModHarmony.UnpatchAll(_harmony);
+
             // Unsubscribe from game events
             // TimeOfDay.OnDayPassed -= OnDayPassed;
         }
@@ -70,6 +125,14 @@ namespace {MOD_NAME}
         //     {
         //         Debug.Log($"[{{MOD_NAME}}] Combo changed: {combo.SelectedItemString}");
         //     }
+        // }
+
+        // EXAMPLE: Interact with another mod at runtime.
+        // if (ModLoader.IsModLoaded("SomeOtherMod"))
+        // {
+        //     var other = ModLoader.FindMod("SomeOtherMod");
+        //     string otherFolder = ModLoader.GetModFolder("SomeOtherMod", ParentMod);
+        //     Debug.Log($"[{{MOD_NAME}}] SomeOtherMod is loaded at {otherFolder}");
         // }
     }
 }

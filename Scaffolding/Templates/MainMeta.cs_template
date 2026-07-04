@@ -1,16 +1,14 @@
 using UnityEngine;
 using ModFramework;
-using HarmonyLib;
+using ModFramework.Core;
 using System;
-using System.IO;
-using System.Reflection;
 
 namespace {MOD_NAME}
 {
     public class {MOD_NAME}Meta : ModMeta
     {
         public static bool GiveMeFreedom = true;
-     
+
         public override string Name
         {
             get { return "{MOD_NAME}"; }
@@ -18,23 +16,76 @@ namespace {MOD_NAME}
 
         public override void Initialize(ModController.DLLMod parentMod)
         {
-            // Resolve this mod's bundled dependencies (Harmony, ModFramework, etc.)
-            // from the "Dependencies" subfolder inside the mod's folder.
-            string dependenciesPath = Path.Combine(parentMod.FolderPath(), "Dependencies");
-            AppDomain.CurrentDomain.AssemblyResolve += (sender, args) =>
-            {
-                string assemblyName = new AssemblyName(args.Name).Name;
-                string candidate = Path.Combine(dependenciesPath, assemblyName + ".dll");
-                if (File.Exists(candidate))
+            // ---------------------------------------------------------------
+            // Step 1: Verify required dependencies are present.
+            //
+            // If a REQUIRED dep is missing, the player gets an in-game
+            // dialog explaining what's wrong and where to get it. The mod
+            // is expected to be defensive in its other code paths and
+            // short-circuit out if its dependencies aren't there.
+            //
+            // Add or remove entries as needed. The DownloadUrl is shown
+            // in the dialog so the player knows where to get the missing
+            // file/mod.
+            // ---------------------------------------------------------------
+            bool allDepsOk = ModDependencies.VerifyOrWarn(parentMod,
+                new ModDependency
                 {
-                    Debug.Log("[{MOD_NAME}] Resolving dependency: " + candidate);
-                    return Assembly.LoadFrom(candidate);
+                    Name = "ModFramework.dll",
+                    Kind = ModDependencyKind.File,
+                    Severity = ModDependencySeverity.Required,
+                    DownloadUrl = "https://github.com/Dykke/ModFramework/releases"
+                },
+                new ModDependency
+                {
+                    Name = "0Harmony.dll",
+                    Kind = ModDependencyKind.File,
+                    Severity = ModDependencySeverity.Required,
+                    DownloadUrl = "https://github.com/pardeike/Harmony"
                 }
-                return null;
-            };
-            // (Optional) Initialize Harmony patching here if needed
-            // var harmony = new Harmony("com.yourname.{MOD_NAME}");
-            // harmony.PatchAll();
+                // Example optional dep:
+                //, new ModDependency
+                //{
+                //    Name = "SomeOtherMod",
+                //    Kind = ModDependencyKind.Mod,
+                //    Severity = ModDependencySeverity.Optional,
+                //    DownloadUrl = "https://..."
+                //}
+            );
+
+            if (!allDepsOk)
+            {
+                Debug.LogWarning("[{MOD_NAME}] Required dependencies are missing. Mod functionality will be disabled.");
+                return; // Mod is loaded but won't run its behaviour. You can also choose to throw.
+            }
+
+            // ---------------------------------------------------------------
+            // Step 2: Apply Harmony patches.
+            //
+            // ModHarmony.CreateAndPatchAll() wraps the standard
+            //   var harmony = new Harmony("com.yourname.{MOD_NAME}");
+            //   harmony.PatchAll();
+            // pattern, with:
+            //   - automatic patcher-id normalization (adds "com." prefix)
+            //   - logging of how many methods were patched
+            //   - safe failure (returns null + logs error if anything blows up)
+            // ---------------------------------------------------------------
+            var harmony = ModHarmony.CreateAndPatchAll("com.yourname.{MOD_NAME}");
+
+            // ---------------------------------------------------------------
+            // Step 3: (Optional) Load your mod's saved data.
+            //
+            // ModFileAccess.GetModDataPath() returns
+            //   <modFolder>/Data/<sub...>
+            // and ModFileAccess.ReadJson<T>() uses Newtonsoft.Json under
+            // the hood (ILMerged into ModFramework.dll), so you can
+            // serialize Dictionaries, HashSets, properties, etc.
+            //
+            // Example:
+            //   string path = ModFileAccess.GetModDataPath(parentMod, "state.json");
+            //   var state  = ModFileAccess.TryReadJson<MyState>(path, out bool ok);
+            //   if (!ok) state = new MyState();
+            // ---------------------------------------------------------------
 
             base.Initialize(parentMod);
         }

@@ -40,10 +40,11 @@
       <HintPath>{GAME_DIRECTORY}\Software Inc_Data\Managed\Assembly-CSharp-firstpass.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="0Harmony">
-      <HintPath>{MODFRAMEWORK_BIN}\0Harmony.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
+    <!--
+      ModFramework.dll now contains 0Harmony + Newtonsoft.Json ILMerged
+      inside it (as of v5.1). Mods only need to reference this single DLL.
+      See ModFramework/Tools/ilmerge/README.md for details.
+    -->
     <Reference Include="ModFramework">
       <HintPath>{MODFRAMEWORK_BIN}\ModFramework.dll</HintPath>
       <Private>False</Private>
@@ -83,11 +84,9 @@
   <PropertyGroup>
     <ModFrameworkBin>$([System.IO.Path]::GetFullPath('{MODFRAMEWORK_BIN}'))</ModFrameworkBin>
     <PostBuildEvent>
-echo Copying DLL and XML to Local Mods Directory...
+echo Copying DLL to Local Mods Directory...
 mkdir "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}"
-mkdir "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\Dependencies"
-copy /Y "$(ModFrameworkBin)\0Harmony.dll" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\Dependencies\0Harmony.dll"
-copy /Y "$(ModFrameworkBin)\ModFramework.dll" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\Dependencies\ModFramework.dll"
+copy /Y "$(ModFrameworkBin)\ModFramework.dll" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\ModFramework.dll"
 copy /Y "$(TargetDir)$(TargetName).dll" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\$(TargetName).dll"
 copy /Y "$(ProjectDir)\meta.tyd" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\meta.tyd"
 copy /Y "$(ProjectDir)\UI.xml" "{GAME_DIRECTORY}\DLLMods\{MOD_NAME}\UI.xml"
