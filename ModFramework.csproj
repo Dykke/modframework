@@ -123,10 +123,12 @@
   <PropertyGroup>
     <ILMergeEnabled Condition=" '$(ILMergeEnabled)' == '' ">true</ILMergeEnabled>
     <ILMergePath Condition=" '$(ILMergePath)' == '' ">$(MSBuildProjectDirectory)\Tools\ilmerge\ILMerge.exe</ILMergePath>
+    <!-- Game's Managed folder — ILMerge needs this in /lib: so it can resolve UnityEngine.* and Assembly-CSharp references at merge time -->
+    <ManagedDir Condition=" '$(ManagedDir)' == '' ">E:\SteamLibrary\steamapps\common\Software Inc\Software Inc_Data\Managed</ManagedDir>
   </PropertyGroup>
   <Target Name="ILMergeAssemblies" AfterTargets="Build" Condition="'$(ILMergeEnabled)' == 'true' AND Exists('$(ILMergePath)') AND '$(Configuration)' == 'Release'">
     <Message Text="=== ILMerge step: merging 0Harmony and Newtonsoft.Json INTO ModFramework.dll ===" Importance="high" />
-    <Exec Command="&quot;$(ILMergePath)&quot; /out:&quot;$(OutDir)ModFramework.dll&quot; /targetplatform:v4 /internalize:&quot;$(MSBuildProjectDirectory)\Tools\ilmerge\ilmerge.exclude&quot; /nologo &quot;$(OutDir)ModFramework.dll&quot; &quot;$(OutDir)0Harmony.dll&quot; &quot;$(OutDir)Newtonsoft.Json.dll&quot;" />
+    <Exec Command="&quot;$(ILMergePath)&quot; /lib:&quot;$(ManagedDir)&quot; /out:&quot;$(OutDir)ModFramework.dll&quot; /targetplatform:v4 /internalize:&quot;$(MSBuildProjectDirectory)\Tools\ilmerge\ilmerge.exclude&quot; &quot;$(OutDir)ModFramework.dll&quot; &quot;$(OutDir)0Harmony.dll&quot; &quot;$(OutDir)Newtonsoft.Json.dll&quot;" />
     <Delete Files="$(OutDir)0Harmony.dll" />
     <Delete Files="$(OutDir)Newtonsoft.Json.dll" />
     <Message Text="=== ILMerge complete. ModFramework.dll is the single shippable artifact. ===" Importance="high" />

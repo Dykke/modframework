@@ -16,6 +16,7 @@ Visual Studio Code files
 *.dll
 *.pdb
 *.cache
+MODFRAMEWORK_MEMORY.md
 
 # Generated flag files
 .game-directory

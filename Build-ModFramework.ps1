@@ -48,7 +48,10 @@ Write-Host "Using MSBuild: $msbuild" -ForegroundColor Cyan
 # 1) C# build
 Write-Host ""
 Write-Host "=== Building ModFramework ($Configuration) ===" -ForegroundColor Cyan
-& $msbuild $ProjectFile /t:Build /p:Configuration=$Configuration /v:minimal /nologo
+# /p:ILMergeEnabled=false: the .csproj's AfterTargets="Build" ILMerge target would
+# otherwise fire and eat 0Harmony/Newtonsoft from bin\Release before our manual
+# step below runs. We do the merge in this script instead.
+& $msbuild $ProjectFile /t:Build /p:Configuration=$Configuration /p:ILMergeEnabled=false /v:minimal /nologo
 if ($LASTEXITCODE -ne 0) { throw "MSBuild failed (exit $LASTEXITCODE)" }
 
 # 2) ILMerge for Release
@@ -84,9 +87,20 @@ $exclude = Join-Path $ScriptDir 'Tools\ilmerge\ilmerge.exclude'
 $excludeArg = ''
 if (Test-Path $exclude) { $excludeArg = "/internalize:`"$exclude`"" }
 
+# Game's Managed folder — ILMerge needs this so it can resolve UnityEngine.* and
+# Assembly-CSharp references at merge time. Override with $env:ManagedDir if
+# your Steam install lives elsewhere.
+$managedDir = $env:ManagedDir
+if (-not $managedDir) { $managedDir = 'E:\SteamLibrary\steamapps\common\Software Inc\Software Inc_Data\Managed' }
+if (-not (Test-Path $managedDir)) {
+    Write-Host "ManagedDir not found at $managedDir" -ForegroundColor Yellow
+    Write-Host "Set `$env:ManagedDir so ILMerge can resolve Unity refs." -ForegroundColor Yellow
+}
+$libArg = "/lib:`"$managedDir`""
+
 Write-Host ""
 Write-Host "=== ILMerge: merging 0Harmony + Newtonsoft.Json into ModFramework.dll ===" -ForegroundColor Cyan
-& $ilmergeExe /out:"$mergedDll" /targetplatform:v4 $excludeArg /nologo `
+& $ilmergeExe $libArg /out:"$mergedDll" /targetplatform:v4 $excludeArg `
     "$mergedDll" "$harmony" "$newtonsoft"
 if ($LASTEXITCODE -ne 0) { throw "ILMerge failed (exit $LASTEXITCODE)" }
 
@@ -97,4 +111,5 @@ Remove-Item -Path $newtonsoft -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Host "=== Done ===" -ForegroundColor Green
 Write-Host "Output: $mergedDll"
-Write-Host "Size:   $((Get-Item $mergedDll).Length) bytes"
+$mergedSize = (Get-Item $mergedDll).Length
+Write-Host "Size:   $mergedSize bytes"

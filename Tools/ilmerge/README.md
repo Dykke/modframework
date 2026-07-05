@@ -13,23 +13,25 @@ into a single output assembly. We use it to bake `0Harmony.dll` and
 2. Publishing a mod to Steam Workshop becomes a single-DLL operation
    (no "drop the DLL in the managed folder" steps for the player).
 
-## Setup (one-time)
+## Setup
 
-1. Download the latest `ilmerge` from <https://www.nuget.org/packages/ilmerge/>
-   (file: `ilmerge.console.<version>.nupkg`).
-2. Rename it to `ilmerge.zip` and extract it.
-3. Copy the inner `tools/net452/ILMerge.exe` (and `ILMerge.exe.config`) to this
-   folder. The result should look like:
+**No setup required.** `ILMerge.exe` ships in this folder (ILMerge 3.0.41, MIT-licensed, see `ILMerge.LICENSE.txt`).
 
-   ```
-   Tools/ilmerge/
-     ILMerge.exe
-     ILMerge.exe.config
-     README.md  ← (this file)
-   ```
+The build expects the file at exactly this path:
+```
+Tools/ilmerge/ILMerge.exe
+```
 
-4. (Optional) Drop a `ilmerge.exclude` file in this folder if you want to
-   internalize non-public types. Without it, ILMerge keeps everything public.
+If you ever delete it, restore it from the upstream NuGet package:
+```powershell
+$tmp = Join-Path $env:TEMP 'ilmerge_dl.nupkg'
+Invoke-WebRequest 'https://www.nuget.org/api/v2/package/ilmerge/3.0.41' -OutFile $tmp -UseBasicParsing
+$zip = [System.IO.Path]::ChangeExtension($tmp, '.zip')
+Copy-Item $tmp $zip -Force
+Expand-Archive $zip $env:TEMP\ilmerge_x -Force
+Copy-Item "$env:TEMP\ilmerge_x\tools\net452\ILMerge.exe" "$PSScriptRoot\ILMerge.exe" -Force
+```
+Then drop `ILMerge.LICENSE.txt` next to it (see upstream: https://github.com/dotnet/ILMerge/blob/master/LICENSE).
 
 ## Verifying it works
 
