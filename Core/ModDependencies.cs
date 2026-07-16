@@ -62,6 +62,20 @@ namespace ModFramework.Core
         /// <summary>Override the search path. If null, the standard search order is used.</summary>
         public string CustomPath;
 
+        /// <summary>
+        /// Optional well-known GameObject name registered by an addendum DLL mod.
+        /// When set, <see cref="ModDependencies.IsPresent"/> returns true as soon as
+        /// <c>GameObject.Find(ServiceObjectName)</c> succeeds (live check — avoids
+        /// activation-order races). Prefer this for optional cross-mod features.
+        /// </summary>
+        public string ServiceObjectName;
+
+        /// <summary>
+        /// DLLMods folder name when it differs from <see cref="Name"/> (display/meta name).
+        /// Example: Name = "LogoScape - Native File Browser", FolderName = "LogoScapeDependency".
+        /// </summary>
+        public string FolderName;
+
         public ModDependency() { }
         public ModDependency(string name, ModDependencyKind kind, ModDependencySeverity severity = ModDependencySeverity.Required)
         {
@@ -156,6 +170,17 @@ namespace ModFramework.Core
             if (dep == null || string.IsNullOrEmpty(dep.Name)) return true; // vacuously true
             try
             {
+                // Live service-object check first — dependency may activate after this mod.
+                if (!string.IsNullOrEmpty(dep.ServiceObjectName))
+                {
+                    try
+                    {
+                        if (GameObject.Find(dep.ServiceObjectName) != null)
+                            return true;
+                    }
+                    catch { /* swallow */ }
+                }
+
                 switch (dep.Kind)
                 {
                     case ModDependencyKind.File:
@@ -221,8 +246,8 @@ namespace ModFramework.Core
                     foreach (var m in ModController.Instance.Mods)
                     {
                         if (m == null || m.Meta == null) continue;
-                        if (string.Equals(m.Meta.Name, dep.Name, StringComparison.OrdinalIgnoreCase)) return true;
-                        if (string.Equals(m.FileName, dep.Name, StringComparison.OrdinalIgnoreCase)) return true;
+                        if (NameMatchesMod(dep.Name, m)) return true;
+                        if (!string.IsNullOrEmpty(dep.FolderName) && NameMatchesMod(dep.FolderName, m)) return true;
                     }
                 }
             }
@@ -236,8 +261,31 @@ namespace ModFramework.Core
                 if (!string.IsNullOrEmpty(parent))
                 {
                     if (Directory.Exists(Path.Combine(parent, dep.Name))) return true;
+                    if (!string.IsNullOrEmpty(dep.FolderName) &&
+                        Directory.Exists(Path.Combine(parent, dep.FolderName))) return true;
                 }
             }
+            return false;
+        }
+
+        private static bool NameMatchesMod(string name, ModController.DLLMod mod)
+        {
+            if (mod == null || string.IsNullOrEmpty(name)) return false;
+            try
+            {
+                if (mod.Meta != null && string.Equals(mod.Meta.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (string.Equals(mod.FileName, name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+                string folder = SafeFolderPath(mod);
+                if (!string.IsNullOrEmpty(folder))
+                {
+                    string leaf = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (string.Equals(leaf, name, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            catch { }
             return false;
         }
 

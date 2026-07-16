@@ -41,26 +41,63 @@ namespace {MOD_NAME}
             Debug.Log("[{MOD_NAME}] Activated.");
 
             // ---------------------------------------------------------------
-            // Soft-dependency re-check (Q2 decision).
-            //
-            // Hard-required deps are checked in {MOD_NAME}Meta.Initialize.
-            // Re-check optional ones here so we can warn when the player
-            // activates the mod without something it could benefit from.
+            // Optional addendum DLL — re-check at activation / GameReady.
+            // Do NOT cache IsPresent at Initialize; the dependency may activate later.
             // ---------------------------------------------------------------
-            ModDependencies.VerifyOrWarn(ParentMod,
-                new ModDependency
-                {
-                    Name = "SomeOptionalMod",
-                    Kind = ModDependencyKind.Mod,
-                    Severity = ModDependencySeverity.Optional
-                }
-            );
+            var nativeFeature = new ModDependency
+            {
+                Name = "MyMod - Native Feature",
+                FolderName = "MyModDependency",
+                ServiceObjectName = "MyModNativeService",
+                Kind = ModDependencyKind.Mod,
+                Severity = ModDependencySeverity.Optional
+            };
+
+            ModDependencies.VerifyOrWarn(ParentMod, nativeFeature);
+
+            ModServiceBridge.WhenDependencyReady(ParentMod, nativeFeature, delegate(bool ready)
+            {
+                if (ready)
+                    Debug.Log("[{MOD_NAME}] Optional native feature is available.");
+                else
+                    Debug.Log("[{MOD_NAME}] Optional native feature not installed — reduced functionality.");
+            });
+
+            // At use time (button click, etc.):
+            // if (ModServiceBridge.IsAvailable("MyModNativeService"))
+            //     ModServiceBridge.Send("MyModNativeService", "DoWork", args, SendMessageOptions.DontRequireReceiver);
 
             // Example: Show a window if we are in-game (WindowManager.Instance is not null)
             // if (WindowManager.Instance != null)
             // {
             //     ShowMainWindow();
             // }
+
+            // ---------------------------------------------------------------
+            // Optional addendum dependency (live check — do NOT cache at Awake).
+            //
+            // FolderName = DLLMods folder; Name = ModMeta display name;
+            // ServiceObjectName = GameObject.Find target once dependency activates.
+            // ---------------------------------------------------------------
+            // var nativeBrowserDep = new ModDependency
+            // {
+            //     Name = "MyMod - Native Feature",
+            //     FolderName = "MyModDependency",
+            //     Kind = ModDependencyKind.Mod,
+            //     Severity = ModDependencySeverity.Optional,
+            //     ServiceObjectName = "MyModNativeService",
+            //     DownloadUrl = "https://www.nexusmods.com/softwareinc/mods/"
+            // };
+            //
+            // ModServiceBridge.WhenDependencyReady(ParentMod, nativeBrowserDep, ready =>
+            // {
+            //     if (ready)
+            //         Debug.Log("[{MOD_NAME}] Optional service is ready.");
+            // });
+            //
+            // At use time:
+            // if (ModServiceBridge.IsDependencyReady(ParentMod, nativeBrowserDep))
+            //     ModServiceBridge.Send("MyModNativeService", "ExampleAction", "hello");
 
             // Subscribe to game events
             // TimeOfDay.OnDayPassed += OnDayPassed;

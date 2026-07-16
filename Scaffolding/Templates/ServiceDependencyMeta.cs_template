@@ -1,0 +1,20 @@
+using UnityEngine;
+using ModFramework.Core;
+
+namespace {MOD_NAME}
+{
+    public class {MOD_NAME}Meta : ModMeta
+    {
+        public static bool GiveMeFreedom = true;
+
+        public override string Name
+        {
+            get { return "{MOD_DISPLAY_NAME}"; }
+        }
+
+        public override void ConstructOptionsScreen(RectTransform parent, bool inGame)
+        {
+            // Optional dependency for another mod. Settings go here (Options > Mods).
+        }
+    }
+}

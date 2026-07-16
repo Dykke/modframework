@@ -1,0 +1,34 @@
+using UnityEngine;
+using ModFramework.Core;
+
+namespace {MOD_NAME}
+{
+    /// <summary>
+    /// Optional addendum DLL mod: exposes a well-known service object so other
+    /// mods can call restricted features without a compile-time reference.
+    /// </summary>
+    public class {MOD_NAME}Behaviour : ModBehaviour
+    {
+        public const string ServiceObjectName = "{SERVICE_OBJECT_NAME}";
+
+        public override void OnActivate()
+        {
+            ModServiceHost.Register(ServiceObjectName, go => go.AddComponent<{MOD_NAME}Service>());
+            Debug.Log("[{MOD_NAME}] Service registered: " + ServiceObjectName);
+        }
+
+        public override void OnDeactivate()
+        {
+            ModServiceHost.Unregister(ServiceObjectName);
+        }
+    }
+
+    /// <summary>Receives SendMessage calls from consumer mods.</summary>
+    public class {MOD_NAME}Service : MonoBehaviour
+    {
+        public void ExampleAction(string args)
+        {
+            Debug.Log("[{MOD_NAME}] ExampleAction: " + args);
+        }
+    }
+}

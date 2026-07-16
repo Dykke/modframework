@@ -43,13 +43,14 @@ namespace {MOD_NAME}
                     Severity = ModDependencySeverity.Required,
                     DownloadUrl = "https://github.com/pardeike/Harmony"
                 }
-                // Example optional dep:
                 //, new ModDependency
                 //{
-                //    Name = "SomeOtherMod",
+                //    Name = "MyMod - Native Feature",
+                //    FolderName = "MyModDependency",
+                //    ServiceObjectName = "MyModNativeService",
                 //    Kind = ModDependencyKind.Mod,
                 //    Severity = ModDependencySeverity.Optional,
-                //    DownloadUrl = "https://..."
+                //    DownloadUrl = "https://www.nexusmods.com/softwareinc/mods/"
                 //}
             );
 

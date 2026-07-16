@@ -1,0 +1,52 @@
+using UnityEngine;
+using ModFramework;
+using ModFramework.Core;
+
+namespace {MOD_NAME}Dependency
+{
+    /// <summary>
+    /// Optional addendum DLL mod — exposes a well-known service object for the main mod.
+    /// Deploy to DLLMods/{MOD_NAME}Dependency/ as a separate Nexus download.
+    /// </summary>
+    public class {MOD_NAME}DependencyMeta : ModMeta
+    {
+        public static bool GiveMeFreedom = true;
+
+        public override string Name
+        {
+            get { return "{MOD_NAME} - Native Feature"; }
+        }
+    }
+
+    public class {MOD_NAME}DependencyBehaviour : ModBehaviour
+    {
+        public const string ServiceObjectName = "{MOD_NAME}NativeService";
+
+        public override void OnActivate()
+        {
+            ModServiceHost.Register(ServiceObjectName, delegate(GameObject go)
+            {
+                if (go.GetComponent<{MOD_NAME}NativeService>() == null)
+                    go.AddComponent<{MOD_NAME}NativeService>();
+            });
+            Debug.Log("[{MOD_NAME}Dependency] Service registered: " + ServiceObjectName);
+        }
+
+        public override void OnDeactivate()
+        {
+            ModServiceHost.Unregister(ServiceObjectName);
+        }
+    }
+
+    /// <summary>
+    /// Callable via ModServiceBridge.Send(ServiceObjectName, "DoWork", args).
+    /// </summary>
+    public class {MOD_NAME}NativeService : MonoBehaviour
+    {
+        public void DoWork(string args)
+        {
+            Debug.Log("[{MOD_NAME}Dependency] DoWork: " + args);
+            // System.IO, Win32, etc. allowed here (GiveMeFreedom).
+        }
+    }
+}

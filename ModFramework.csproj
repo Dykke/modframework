@@ -72,12 +72,19 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ModFramework.cs" />
+    <!-- v5.x subfolder entries temporarily disabled (rolled back to v4.x
+         single-file layout) so MoreCompanies v2.0 and v3.0 can build
+         against the legacy ModLogger / ModSettings / Notifications / UIHelper
+         classes that the v5.x refactor removed. Re-enable when mods are
+         ported to the v5.x native API (Debug.Log / this.SaveSetting / etc). -->
+    <!--
     <Compile Include="Core\ModSafety.cs" />
     <Compile Include="Core\ModUtils.cs" />
     <Compile Include="Core\ModDependencies.cs" />
     <Compile Include="Core\ModFileAccess.cs" />
     <Compile Include="Core\ModLoader.cs" />
     <Compile Include="Core\ModHarmony.cs" />
+    <Compile Include="Core\ModServiceBridge.cs" />
     <Compile Include="GameData\ModCompanyHelper.cs" />
     <Compile Include="GameData\ModEmployeeHelper.cs" />
     <Compile Include="GameData\ModMarketHelper.cs" />
@@ -89,6 +96,7 @@
     <Compile Include="UI\CustomNodeGraph.cs" />
     <Compile Include="UI\CustomSplitPane.cs" />
     <Compile Include="UI\CustomUIParser.cs" />
+    -->
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Properties\" />

@@ -49,9 +49,8 @@ namespace ModFramework.Core
                 if (ModController.Instance == null || ModController.Instance.Mods == null) return null;
                 foreach (var m in ModController.Instance.Mods)
                 {
-                    if (m == null || m.Meta == null) continue;
-                    if (string.Equals(m.Meta.Name, modName, StringComparison.OrdinalIgnoreCase)) return m;
-                    if (string.Equals(m.FileName, modName, StringComparison.OrdinalIgnoreCase)) return m;
+                    if (m == null) continue;
+                    if (ModNameMatches(m, modName)) return m;
                 }
             }
             catch (Exception ex)
@@ -135,6 +134,28 @@ namespace ModFramework.Core
         // ------------------------------------------------------------------
         // Internals
         // ------------------------------------------------------------------
+
+        private static bool ModNameMatches(ModController.DLLMod mod, string modName)
+        {
+            if (mod == null || string.IsNullOrEmpty(modName)) return false;
+            try
+            {
+                if (mod.Meta != null && string.Equals(mod.Meta.Name, modName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (string.Equals(mod.FileName, modName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+                string folder = null;
+                try { folder = mod.FolderPath(); } catch { }
+                if (!string.IsNullOrEmpty(folder))
+                {
+                    string leaf = Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (string.Equals(leaf, modName, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            catch { }
+            return false;
+        }
 
         private static string GetRoot(ModController.DLLMod relativeTo)
         {

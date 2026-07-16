@@ -7,7 +7,7 @@ A complete UI, utility, and gameplay framework for building Software Inc mods.
 ### What is this and why use it?
 Modding Software Inc UI traditionally required building tedious C# hierarchies or fighting with Unity's UI systems.
 
-**ModFramework v5.1** solves this by providing:
+**ModFramework v5.2** solves this by providing:
 - **Native XML Parsing Integration** - Instead of building UI in C#, write simple `UI.xml` files and let the game's engine render them instantly.
 - **Custom XML Tags** - Extends the game's parser to support complex widgets like `<accordion>`, `<splitpane>`, `<cardlayout>`, `<piechart>`, `<barchart>`, `<linechart>`, and `<nodegraph>`.
 - **Game Data Wrappers** - Safely read company, product, employee, and market data without null references.
@@ -17,6 +17,7 @@ Modding Software Inc UI traditionally required building tedious C# hierarchies o
 - **Mod Discovery** - Ask "is mod X loaded?" at runtime without reflection. (NEW in v5.1)
 - **Centralized Harmony** - Clean wrapper for the `new Harmony(...).PatchAll()` pattern with a single mod-friendly API. (NEW in v5.1)
 - **Single-DLL Distribution** - In Release builds, `0Harmony.dll` and `Newtonsoft.Json.dll` are ILMerged into `ModFramework.dll` so your mod ships as one file. (NEW in v5.1)
+- **Optional Addendum DLL Bridge** - `ModServiceHost` / `ModServiceBridge` for Nexus DLL mods that ship a separate optional feature DLL (service object pattern). (NEW in v5.2)
 - **Project Scaffolding** - Create a new mod project in 30 seconds.
 
 **Namespace:** `ModFramework.UI` (UI) / `ModFramework.Core` (utilities) / `ModFramework.GameData` (data wrappers)

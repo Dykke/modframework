@@ -1279,3 +1279,84 @@ ModFramework/
       +- UI.xml_template
       \- MainMeta.cs.guide
 ```
+
+---
+
+# v5.2 — Optional addendum DLL bridge (Nexus / local DLL mods)
+
+v5.2 adds `ModServiceBridge` / `ModServiceHost` and extends `ModDependency` for the same pattern as LogoScape's optional native file-browser dependency — but for **ModFramework DLL mods** (not Workshop CS).
+
+## When to use
+
+| Scenario | Approach |
+|---|---|
+| Main mod on Nexus as DLL | ModFramework consumer API |
+| Optional feature needs System.IO / Win32 | Separate addendum DLL + `GiveMeFreedom` |
+| No compile-time reference between mods | `ServiceObjectName` + `SendMessage` |
+| Main mod on Steam Workshop as CS | Use `_SteamTemplates` + `NativeFileBrowser` pattern in `steam-workshop-mods.md` — not ModFramework |
+
+## Declare an optional addendum dependency
+
+```csharp
+var nativeBrowser = new ModDependency
+{
+    Name = "LogoScape - Native File Browser",   // ModMeta.Name (display)
+    FolderName = "LogoScapeDependency",         // DLLMods folder name
+    ServiceObjectName = "LogoScapeNativeBrowser", // live GameObject.Find check
+    Kind = ModDependencyKind.Mod,
+    Severity = ModDependencySeverity.Optional,
+    DownloadUrl = "https://www.nexusmods.com/softwareinc/mods/"
+};
+
+// Required deps: check once in Initialize (unchanged).
+// Optional service deps: re-check at use time or on GameReady — never cache at Initialize.
+ModServiceBridge.WhenDependencyReady(ParentMod, nativeBrowser, ready =>
+{
+    if (ready) Debug.Log("Native feature available.");
+});
+```
+
+`ModDependencies.IsPresent` now:
+1. Returns `true` immediately if `ServiceObjectName` exists (live).
+2. Matches mod by `Meta.Name`, `FileName`, or **folder leaf name**.
+3. Falls back to `FolderName` for installed-but-not-loaded folder checks.
+
+## Provider (addendum DLL)
+
+```csharp
+public override void OnActivate()
+{
+    ModServiceHost.Register("LogoScapeNativeBrowser", go =>
+    {
+        if (go.GetComponent<NativeBrowserService>() == null)
+            go.AddComponent<NativeBrowserService>();
+    });
+}
+
+public override void OnDeactivate()
+{
+    ModServiceHost.Unregister("LogoScapeNativeBrowser");
+}
+```
+
+Template: `Scaffolding/Templates/ServiceDependency.cs_template`
+
+## Consumer (main DLL mod)
+
+```csharp
+if (ModServiceBridge.IsAvailable("LogoScapeNativeBrowser"))
+{
+    ModServiceBridge.Send("LogoScapeNativeBrowser", "PickImage", args,
+        SendMessageOptions.DontRequireReceiver);
+}
+```
+
+## Rules (same lessons as LogoScape 2026-07-13)
+
+1. **Do not cache** optional service availability at `Initialize` — dependency may activate later.
+2. **Align names:** `ModMeta.Name`, `FolderName`, and `ServiceObjectName` must match what the consumer declares.
+3. **Check live** in UI / feature code via `ModServiceBridge.IsAvailable` or `IsDependencyReady`.
+4. Addendum mod ships as its own DLL + `meta.tyd` on Nexus — not bundled inside the main mod DLL.
+
+See also: `cursor-stuff/notes/steam-workshop-mods.md` (Workshop CS variant of the same idea).
+
