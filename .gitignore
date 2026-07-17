@@ -16,15 +16,18 @@ Visual Studio Code files
 *.dll
 *.pdb
 *.cache
-MODFRAMEWORK_MEMORY.md
-decisions.md
-security-review.md
-sync-changelog.md
+
+# Build / scratch logs (not published)
+*.log
 
 # Generated flag files
 .game-directory
 .modframework-built
+MODFRAMEWORK_MEMORY.md
 
 # Bundled dependencies (tracked)
 !Harmony/0Harmony.dll
 !Vendor/Newtonsoft.Json.dll
+
+notes/
+NEXUS_DESCRIPTION.bbcode

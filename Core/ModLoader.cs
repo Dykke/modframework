@@ -1,5 +1,5 @@
 // ModLoader.cs
-// ModFramework v5.1
+// ModFramework v6.0
 //
 // Mod discovery and inspection utilities.
 //
@@ -18,6 +18,16 @@
 // All methods are safe to call from any point in the mod lifecycle. They return
 // false / null / empty when the game state is not available (e.g., Initialize()
 // may run before ModController.Instance is populated).
+//
+// v6.0 changes:
+//   - Class is marked with [ModFrameworkPublicAPI("v6.0")] — it's part of
+//     the curated v6.0 public API surface.
+//   - No permission check is needed (this is a read-only utility: it only
+//     iterates ModController.Instance.Mods and reads folder paths; no
+//     privileged operations).
+//   - C# 5 compatibility: removed C# 6+ string interpolation ($"...") in
+//     favor of string concatenation, and replaced the null-conditional
+//     operator (parentMod?.FolderPath()) with manual null checks.
 
 using System;
 using System.Collections.Generic;
@@ -26,6 +36,14 @@ using UnityEngine;
 
 namespace ModFramework.Core
 {
+    /// <summary>
+    /// Mod discovery and inspection utilities.
+    ///
+    /// v6.0: marked as part of the curated public API surface. No permission
+    /// check required (all operations are read-only — file existence + mod
+    /// registry iteration).
+    /// </summary>
+    [ModFrameworkPublicAPI("v6.0", Reason = "Mod discovery")]
     public static class ModLoader
     {
         private const string Tag = "[ModLoader]";
@@ -55,7 +73,7 @@ namespace ModFramework.Core
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"{Tag} FindMod failed for '{modName}': {ex.Message}");
+                Debug.LogWarning(Tag + " FindMod failed for '" + modName + "': " + ex.Message);
             }
             return null;
         }
@@ -71,14 +89,18 @@ namespace ModFramework.Core
                 {
                     if (m == null) continue;
                     string n = null;
-                    try { n = m.Meta?.Name; } catch { }
+                    try
+                    {
+                        if (m.Meta != null) n = m.Meta.Name;
+                    }
+                    catch { }
                     if (string.IsNullOrEmpty(n)) n = m.FileName;
                     if (!string.IsNullOrEmpty(n) && !names.Contains(n)) names.Add(n);
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"{Tag} GetAllLoadedModNames failed: {ex.Message}");
+                Debug.LogWarning(Tag + " GetAllLoadedModNames failed: " + ex.Message);
             }
             return names;
         }
@@ -94,7 +116,7 @@ namespace ModFramework.Core
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"{Tag} GetAllLoadedMods failed: {ex.Message}");
+                Debug.LogWarning(Tag + " GetAllLoadedMods failed: " + ex.Message);
             }
             return list;
         }

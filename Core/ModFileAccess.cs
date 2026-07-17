@@ -1,27 +1,42 @@
 // ModFileAccess.cs
-// ModFramework v5.1
+// ModFramework v6.1
 //
 // Safe file I/O for mods.
 //
-// USAGE:
-//   string path = ModFileAccess.GetModDataPath(parentMod, "session.json");
-//   ModFileAccess.WriteJson(path, myData);
-//   var data = ModFileAccess.TryReadJson<MyData>(path, out var ok);
+// v6.0: New v6.0 API takes ModIdentity + SafePath + per-op permission check.
 //
-// Provides safe wrappers around System.IO that never throw — they return false / null / default
-// on failure and log a warning. All paths are resolved relative to the mod's folder, and parent
-// directories are created automatically when writing.
+// v6.1: Removed the 18 v5.x [Obsolete] wrappers
+// (GetModDataPath / GetModFolder / GetManagedFolder / ReadText / WriteText /
+// AppendText / WriteJson / ReadJson / TryReadJson / ToJsonString / ReadBytes /
+// WriteBytes / Delete / DeleteIfExists / Exists / DirectoryExists /
+// EnsureDirectory / GetGameRoot). These intentionally skipped the permission
+// check for back-compat with v5.x Workshop CS mods, but a malicious Nexus DLL
+// could exploit them to write to arbitrary paths (e.g. `C:\Windows\...`) with
+// no declared FileWrite permission. The v6.1 removal closes this AV-1
+// (arbitrary file overwrite) bypass — the only way to do file I/O in v6.1+ is
+// via the v6.0 API (ModIdentity + SafePath + Permission.FileWrite).
 //
-// JSON serialization uses Newtonsoft.Json (ILMerged into ModFramework.dll per Q3), which supports
-// Dictionaries, HashSets, properties, polymorphic types, and other features that Unity's
-// JsonUtility cannot handle. For TechFrontier's TFSessionHeader (which has 5+ Dictionary<,>
-// properties) Newtonsoft is the right call.
+// USAGE (v6.0+):
+//   var identity = ModFrameworkActivator.OnActivate(this);   // in your mod's OnActivate
+//   SafePath path = SafePath.GetModDataPathSafe(identity, "session.json");
+//   ModFileAccess.WriteJson(identity, path, myData);
+//   var data = ModFileAccess.TryReadJson<MyData>(identity, path, out var ok);
 
 using System;
 using System.IO;
 using System.Text;
 using UnityEngine;
-using Newtonsoft.Json;
+
+// v6.1.1: JSON serialization uses Unity's engine-native JsonUtility instead of
+// Newtonsoft.Json. The ILMerged Newtonsoft 13.0.3 fails its JsonWriter static
+// initializer under Unity 2018.4's Mono runtime ("type initializer for
+// 'Newtonsoft.Json.JsonWriter' threw an exception"), so WriteJson always threw
+// and settings never persisted. JsonUtility is guaranteed to work in-engine and
+// removes the fragile ~700KB ILMerge dependency. NOTE for consumers: JsonUtility
+// only serializes public fields (or [SerializeField] private fields) on
+// [Serializable] types; it does NOT support Dictionary, properties, or
+// top-level arrays. Mod settings should be plain [Serializable] POCOs with
+// public fields.
 
 namespace ModFramework.Core
 {
@@ -29,61 +44,242 @@ namespace ModFramework.Core
     {
         private const string Tag = "[ModFileAccess]";
 
-        // ------------------------------------------------------------------
-        // Path helpers
-        // ------------------------------------------------------------------
+        // ==================================================================
+        // v6.0 API — takes ModIdentity + SafePath + permission check + audit
+        // ==================================================================
 
-        /// <summary>Absolute path to the mod's root folder. Never null but may be empty if mod state is unavailable.</summary>
-        public static string GetModFolder(ModController.DLLMod parentMod)
-        {
-            try { return parentMod?.FolderPath() ?? string.Empty; }
-            catch { return string.Empty; }
-        }
+        // ---- Read ----
 
-        /// <summary>Absolute path to &lt;modFolder&gt;/Data/&lt;sub...&gt;. Auto-creates parent directories on write.</summary>
-        public static string GetModDataPath(ModController.DLLMod parentMod, params string[] subPaths)
+        /// <summary>Read text from a SafePath. Requires Permission.FileRead.</summary>
+        [ModFrameworkPublicAPI("v6.0")]
+        public static string ReadText(ModIdentity id, SafePath path)
         {
-            string root = GetModFolder(parentMod);
-            if (string.IsNullOrEmpty(root)) return string.Empty;
-            string[] parts;
-            if (subPaths == null || subPaths.Length == 0)
+            if (path == null) return null;
+            SecurityGuards.RequirePermission(id, Permission.FileRead);
+            try
             {
-                parts = new[] { "Data" };
-            }
-            else
-            {
-                parts = new string[subPaths.Length + 1];
-                parts[0] = "Data";
-                for (int i = 0; i < subPaths.Length; i++)
+                if (!File.Exists(path.ResolvedAbsolute))
                 {
-                    parts[i + 1] = subPaths[i] ?? string.Empty;
+                    AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                        "FILE_READ", path.ResolvedAbsolute, "MISSING", "");
+                    return null;
                 }
+                var content = File.ReadAllText(path.ResolvedAbsolute);
+                AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                    "FILE_READ", path.ResolvedAbsolute, "OK", content.Length + " bytes");
+                return content;
             }
-            return Path.Combine(parts);
+            catch (Exception ex)
+            {
+                AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                    "FILE_READ", path.ResolvedAbsolute, "ERROR", ex.GetType().Name);
+                Debug.LogWarning(string.Format("{0} ReadText failed for '{1}': {2}", Tag, path.ResolvedAbsolute, ex.Message));
+                return null;
+            }
         }
 
-        /// <summary>Absolute path to the game's Managed folder (e.g. ".../Software Inc_Data/Managed").</summary>
-        public static string GetManagedFolder()
+        /// <summary>Read bytes from a SafePath. Requires Permission.FileRead.</summary>
+        [ModFrameworkPublicAPI("v6.0")]
+        public static byte[] ReadBytes(ModIdentity id, SafePath path)
         {
-            try { return Path.Combine(Application.dataPath, "Managed"); }
-            catch { return string.Empty; }
+            if (path == null) return null;
+            SecurityGuards.RequirePermission(id, Permission.FileRead);
+            try
+            {
+                if (!File.Exists(path.ResolvedAbsolute)) return null;
+                var bytes = File.ReadAllBytes(path.ResolvedAbsolute);
+                AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                    "FILE_READ", path.ResolvedAbsolute, "OK", bytes.Length + " bytes");
+                return bytes;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(string.Format("{0} ReadBytes failed for '{1}': {2}", Tag, path.ResolvedAbsolute, ex.Message));
+                return null;
+            }
         }
 
-        /// <summary>Absolute path to the game's root folder (where the executable lives).</summary>
-        public static string GetGameRoot()
+        /// <summary>Read JSON from a SafePath. Requires Permission.FileRead.</summary>
+        [ModFrameworkPublicAPI("v6.0")]
+        public static T ReadJson<T>(ModIdentity id, SafePath path) where T : class
         {
-            try { return Path.GetDirectoryName(Application.dataPath) ?? string.Empty; }
-            catch { return string.Empty; }
+            string content = ReadText(id, path);
+            if (string.IsNullOrEmpty(content)) return null;
+            try { return JsonUtility.FromJson<T>(content); }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(string.Format("{0} ReadJson<{1}> deserialize failed for '{2}': {3}",
+                    Tag, typeof(T).Name, path == null ? "<null>" : path.ResolvedAbsolute, ex.Message));
+                return null;
+            }
         }
 
-        // ------------------------------------------------------------------
-        // Existence / directory helpers
-        // ------------------------------------------------------------------
+        [ModFrameworkPublicAPI("v6.0")]
+        public static bool TryReadJson<T>(ModIdentity id, SafePath path, out T result) where T : class
+        {
+            result = ReadJson<T>(id, path);
+            return result != null;
+        }
 
-        public static bool Exists(string path) => SafeExists(path, asDir: false);
-        public static bool DirectoryExists(string path) => SafeExists(path, asDir: true);
+        // ---- Write ----
 
-        public static void EnsureDirectory(string path)
+        /// <summary>Write text to a SafePath. Requires Permission.FileWrite (or FileAppend for append).</summary>
+        [ModFrameworkPublicAPI("v6.0")]
+        public static bool WriteText(ModIdentity id, SafePath path, string content, bool createDirIfMissing = true)
+        {
+            if (path == null) return false;
+            SecurityGuards.RequirePermission(id, Permission.FileWrite);
+            try
+            {
+                if (createDirIfMissing) EnsureDirectory(Path.GetDirectoryName(path.ResolvedAbsolute));
+                File.WriteAllText(path.ResolvedAbsolute, content ?? string.Empty, Encoding.UTF8);
+                AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                    "FILE_WRITE", path.ResolvedAbsolute, "OK", (content == null ? 0 : content.Length) + " bytes");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                    "FILE_WRITE", path.ResolvedAbsolute, "ERROR", ex.GetType().Name);
+                Debug.LogWarning(string.Format("{0} WriteText failed for '{1}': {2}", Tag, path.ResolvedAbsolute, ex.Message));
+                return false;
+            }
+        }
+
+        /// <summary>Append text to a SafePath. Requires Permission.FileAppend.</summary>
+        [ModFrameworkPublicAPI("v6.0")]
+        public static bool AppendText(ModIdentity id, SafePath path, string content, bool createDirIfMissing = true)
+        {
+            if (path == null) return false;
+            SecurityGuards.RequirePermission(id, Permission.FileAppend);
+            try
+            {
+                if (createDirIfMissing) EnsureDirectory(Path.GetDirectoryName(path.ResolvedAbsolute));
+                File.AppendAllText(path.ResolvedAbsolute, content ?? string.Empty, Encoding.UTF8);
+                AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                    "FILE_APPEND", path.ResolvedAbsolute, "OK", (content == null ? 0 : content.Length) + " bytes");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(string.Format("{0} AppendText failed for '{1}': {2}", Tag, path.ResolvedAbsolute, ex.Message));
+                return false;
+            }
+        }
+
+        /// <summary>Write bytes to a SafePath. Requires Permission.FileWrite.</summary>
+        [ModFrameworkPublicAPI("v6.0")]
+        public static bool WriteBytes(ModIdentity id, SafePath path, byte[] data, bool createDirIfMissing = true)
+        {
+            if (path == null) return false;
+            SecurityGuards.RequirePermission(id, Permission.FileWrite);
+            try
+            {
+                if (createDirIfMissing) EnsureDirectory(Path.GetDirectoryName(path.ResolvedAbsolute));
+                File.WriteAllBytes(path.ResolvedAbsolute, data ?? Array.Empty<byte>());
+                AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                    "FILE_WRITE", path.ResolvedAbsolute, "OK", (data == null ? 0 : data.Length) + " bytes");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(string.Format("{0} WriteBytes failed for '{1}': {2}", Tag, path.ResolvedAbsolute, ex.Message));
+                return false;
+            }
+        }
+
+        /// <summary>Write JSON to a SafePath. Requires Permission.FileWrite.</summary>
+        [ModFrameworkPublicAPI("v6.0")]
+        public static bool WriteJson<T>(ModIdentity id, SafePath path, T data, bool prettyPrint = true)
+        {
+            if (path == null) return false;
+            SecurityGuards.RequirePermission(id, Permission.FileWrite);
+            try
+            {
+                EnsureDirectory(Path.GetDirectoryName(path.ResolvedAbsolute));
+                string json = JsonUtility.ToJson(data, prettyPrint);
+                File.WriteAllText(path.ResolvedAbsolute, json, new UTF8Encoding(false));
+                AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                    "FILE_WRITE", path.ResolvedAbsolute, "OK", json.Length + " bytes JSON");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(string.Format("{0} WriteJson<{1}> failed for '{2}': {3}",
+                    Tag, typeof(T).Name, path.ResolvedAbsolute, ex.Message));
+                return false;
+            }
+        }
+
+        /// <summary>Serialize to JSON string without touching the file system.</summary>
+        [ModFrameworkPublicAPI("v6.0")]
+        public static string ToJsonString<T>(ModIdentity id, T data, bool prettyPrint = true)
+        {
+            SecurityGuards.RequirePermission(id, Permission.FileRead); // need some permission to call; Read is the cheapest
+            try { return JsonUtility.ToJson(data, prettyPrint); }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(string.Format("{0} ToJsonString<{1}> failed: {2}", Tag, typeof(T).Name, ex.Message));
+                return null;
+            }
+        }
+
+        // ---- Delete ----
+
+        [ModFrameworkPublicAPI("v6.0")]
+        public static bool Delete(ModIdentity id, SafePath path)
+        {
+            if (path == null) return false;
+            SecurityGuards.RequirePermission(id, Permission.FileDelete);
+            try
+            {
+                if (File.Exists(path.ResolvedAbsolute)) File.Delete(path.ResolvedAbsolute);
+                else if (Directory.Exists(path.ResolvedAbsolute)) Directory.Delete(path.ResolvedAbsolute, true);
+                AuditLog.Log(id == null ? null : id.ModId, id == null ? null : id.DisplayName,
+                    "FILE_DELETE", path.ResolvedAbsolute, "OK", "");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(string.Format("{0} Delete failed for '{1}': {2}", Tag, path.ResolvedAbsolute, ex.Message));
+                return false;
+            }
+        }
+
+        [ModFrameworkPublicAPI("v6.0")]
+        public static bool DeleteIfExists(ModIdentity id, SafePath path) { return Delete(id, path); }
+
+        // ---- Existence / directory ----
+
+        [ModFrameworkPublicAPI("v6.0")]
+        public static bool Exists(ModIdentity id, SafePath path)
+        {
+            SecurityGuards.RequirePermission(id, Permission.FileDirectoryList);
+            return path != null && File.Exists(path.ResolvedAbsolute);
+        }
+
+        [ModFrameworkPublicAPI("v6.0")]
+        public static bool DirectoryExists(ModIdentity id, SafePath path)
+        {
+            SecurityGuards.RequirePermission(id, Permission.FileDirectoryList);
+            return path != null && Directory.Exists(path.ResolvedAbsolute);
+        }
+
+        [ModFrameworkPublicAPI("v6.0")]
+        public static void EnsureDirectory(ModIdentity id, SafePath path)
+        {
+            if (path == null) return;
+            SecurityGuards.RequirePermission(id, Permission.FileDirectoryList);
+            EnsureDirectory(path.ResolvedAbsolute);
+        }
+
+        // ---- internals (private helpers, not part of public API) ----
+
+        // Internal helper: create a directory if it doesn't exist. Used by
+        // the v6.0 public API (WriteText/WriteBytes/AppendText/WriteJson with
+        // createDirIfMissing=true). Not a public method — mods that need
+        // directory creation go through EnsureDirectory(ModIdentity, SafePath).
+        private static void EnsureDirectory(string path)
         {
             if (string.IsNullOrEmpty(path)) return;
             try
@@ -92,191 +288,8 @@ namespace ModFramework.Core
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"{Tag} Could not create directory '{path}': {ex.Message}");
+                Debug.LogWarning("[ModFramework.ModFileAccess] Could not create directory '" + path + "': " + ex.Message);
             }
-        }
-
-        // ------------------------------------------------------------------
-        // Text I/O
-        // ------------------------------------------------------------------
-
-        public static string ReadText(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return null;
-            try
-            {
-                if (!File.Exists(path))
-                {
-                    Debug.LogWarning($"{Tag} ReadText: file not found '{path}'");
-                    return null;
-                }
-                return File.ReadAllText(path);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"{Tag} ReadText failed for '{path}': {ex.Message}");
-                return null;
-            }
-        }
-
-        public static bool WriteText(string path, string content, bool createDirIfMissing = true)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            try
-            {
-                if (createDirIfMissing) EnsureDirectory(Path.GetDirectoryName(path));
-                File.WriteAllText(path, content ?? string.Empty, Encoding.UTF8);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"{Tag} WriteText failed for '{path}': {ex.Message}");
-                return false;
-            }
-        }
-
-        public static bool AppendText(string path, string content, bool createDirIfMissing = true)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            try
-            {
-                if (createDirIfMissing) EnsureDirectory(Path.GetDirectoryName(path));
-                File.AppendAllText(path, content ?? string.Empty, Encoding.UTF8);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"{Tag} AppendText failed for '{path}': {ex.Message}");
-                return false;
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // JSON I/O (Newtonsoft.Json)
-        // ------------------------------------------------------------------
-
-        /// <summary>Serialize <paramref name="data"/> to JSON and write to <paramref name="path"/>. Returns true on success.</summary>
-        public static bool WriteJson<T>(string path, T data, bool prettyPrint = true)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            try
-            {
-                EnsureDirectory(Path.GetDirectoryName(path));
-                string json = JsonConvert.SerializeObject(data, prettyPrint ? Formatting.Indented : Formatting.None);
-                File.WriteAllText(path, json, new UTF8Encoding(false));
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"{Tag} WriteJson<{typeof(T).Name}> failed for '{path}': {ex.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>Read JSON from <paramref name="path"/> and deserialize to <typeparamref name="T"/>. Returns default(T) on failure (logs warning).</summary>
-        public static T ReadJson<T>(string path) where T : class
-        {
-            if (string.IsNullOrEmpty(path)) return null;
-            try
-            {
-                if (!File.Exists(path)) return null;
-                string json = File.ReadAllText(path);
-                if (string.IsNullOrEmpty(json)) return null;
-                return JsonConvert.DeserializeObject<T>(json);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"{Tag} ReadJson<{typeof(T).Name}> failed for '{path}': {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>Like ReadJson but signals success via the out parameter. Returns default(T) and ok=false on failure.</summary>
-        public static bool TryReadJson<T>(string path, out T result) where T : class
-        {
-            result = ReadJson<T>(path);
-            return result != null;
-        }
-
-        /// <summary>Serialize <paramref name="data"/> to a JSON string without touching the file system. Returns null on failure.</summary>
-        public static string ToJsonString<T>(T data, bool prettyPrint = true)
-        {
-            try
-            {
-                return JsonConvert.SerializeObject(data, prettyPrint ? Formatting.Indented : Formatting.None);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"{Tag} ToJsonString<{typeof(T).Name}> failed: {ex.Message}");
-                return null;
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // Binary I/O
-        // ------------------------------------------------------------------
-
-        public static byte[] ReadBytes(string path)
-        {
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-            try { return File.ReadAllBytes(path); }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"{Tag} ReadBytes failed for '{path}': {ex.Message}");
-                return null;
-            }
-        }
-
-        public static bool WriteBytes(string path, byte[] data, bool createDirIfMissing = true)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            try
-            {
-                if (createDirIfMissing) EnsureDirectory(Path.GetDirectoryName(path));
-                File.WriteAllBytes(path, data ?? Array.Empty<byte>());
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"{Tag} WriteBytes failed for '{path}': {ex.Message}");
-                return false;
-            }
-        }
-
-        // ------------------------------------------------------------------
-        // Delete
-        // ------------------------------------------------------------------
-
-        public static bool Delete(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            try
-            {
-                if (File.Exists(path)) File.Delete(path);
-                else if (Directory.Exists(path)) Directory.Delete(path, true);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"{Tag} Delete failed for '{path}': {ex.Message}");
-                return false;
-            }
-        }
-
-        public static bool DeleteIfExists(string path) => Delete(path);
-
-        // ------------------------------------------------------------------
-        // Internals
-        // ------------------------------------------------------------------
-
-        private static bool SafeExists(string path, bool asDir)
-        {
-            if (string.IsNullOrEmpty(path)) return false;
-            try
-            {
-                return asDir ? Directory.Exists(path) : File.Exists(path);
-            }
-            catch { return false; }
         }
     }
 }

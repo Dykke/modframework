@@ -1077,6 +1077,13 @@ License: MIT | Copyright (c) 2017 Andreas Pardeike | Full text: [Harmony/LICENSE
 
 ## Changelog
 
+- **v6.1.2** (2026-07-17) - In-game Settings window no longer clips content. `OptionsWindow.AddModOption` sizes each mod's scroll region once from the parent's direct children; fixed with zero-size tab containers, `CanvasGroup.alpha` tab toggling (both tabs stay active so both are measured), and per-label self-sizing to `preferredHeight`. **Verified in-game 2026-07-17.**
+- **v6.1.1** (2026-07-17) - Settings persistence + Newtonsoft removed. The ILMerged Newtonsoft.Json 13.0.3 static ctor throws under the game's Unity 2018.4 Mono runtime, so every `WriteJson` failed silently. `ModFileAccess` now uses Unity's `JsonUtility`; Newtonsoft is dropped from both ILMerge paths (DLL ~700 KB smaller, ~2.56 MB). **Settings classes must be `[Serializable]` with public fields** — no `Dictionary`, properties, or top-level arrays.
+- **v6.1.0** (2026-07-17) - Closes the v5.x `[Obsolete]` back-compat permission bypass: the 6 v4.x single-file classes are now `internal` and the 28 `[Obsolete]` v5.x wrappers in `Core/` are deleted (they had skipped `RequirePermission`). Adds the in-game **Mod Audit Log** + **Mod permissions** windows via the `ModFrameworkSettings` shim mod. `AssemblyVersion` 6.0.1.0 → 6.1.0.0; strong-name token unchanged. Workshop CS mods must pin to v6.0.0. See the **v6.1 — hardening, in-game UI, and the four barriers** section below. **Breaking**: v5.x wrappers removed.
+- **v6.0.1** (July 2026) - Convenience overloads that accept the v6.0+ handle (`ModBehaviour` / `ModIdentity`) instead of the lower-level `ModController.DLLMod`. `ModFrameworkActivator.OnActivate(ModBehaviour)` looks up the matching DLLMod via `ModController.Instance.Mods` and dispatches to the existing `OnActivate(ModController.DLLMod, ...)` overload. `ModDependencies.VerifyOrWarn(ModIdentity, ...)` looks up the registered DLLMod via `ModRegistry.GetDLLMod(identity)` and dispatches to the existing `VerifyOrWarn(ModController.DLLMod, ...)`. Both additions unblock the `ModFrameworkExample` canonical reference mod from compiling. **Breaking**: none — purely additive.
+- **v6.0** (July 2026) - Security-focused overhaul. Per-mod identity (`ModIdentity`), path safety (`SafePath`), unforgeable event/service handles (`EventKey` / `ServiceToken`), 22 fine-grained permission flags + 4 named presets, framework strong-name signing, per-day audit log, hard-name-protected `OnActivate` / `OnDeactivate` lifecycle. The v5.x API is preserved as `[Obsolete]` back-compat — existing v5.x mods keep working with a compile warning. See the **v6.0 — Security-focused overhaul** section below for the new API. v6.0 is a breaking-change major: new code should target the v6.0 API.
+- **v5.2** (July 2026) - Optional addendum DLL bridge (`ModServiceBridge` / `ModServiceHost` / `ModDependency.ServiceObjectName`) for Nexus / local DLL mods. See the v5.2 section below.
+- **v5.1** (June 2026) - `ModDependencies`, `ModFileAccess`, `ModLoader`, `ModHarmony` + ILMerge single-DLL distribution. See the v5.1 section below.
 - **v5.0** (May 2026) - Massive UI Overhaul: Deprecated C# programmatic UI builder (31 files removed). Replaced with lightweight Native XML Integration API hooking into `WindowManager`. Replaced `DOCUMENTATION.md` UI guide with comprehensive XML manual.
 - **v4.1** (April 2026) - Bundled Harmony DLL (no NuGet required), generalized game paths with `{GAME_DIRECTORY}` placeholder, added `-GameDir` to scaffolding script with path validation and caching, scoped ModSettings API, UIHelper settings helpers
 - **v4.0** (March 2026) - Accessible DLL modding: Game Data Wrappers, Lifecycle Hooks, Error Safety, Harmony Helpers, Project Scaffolding
@@ -1359,4 +1366,605 @@ if (ModServiceBridge.IsAvailable("LogoScapeNativeBrowser"))
 4. Addendum mod ships as its own DLL + `meta.tyd` on Nexus — not bundled inside the main mod DLL.
 
 See also: `cursor-stuff/notes/steam-workshop-mods.md` (Workshop CS variant of the same idea).
+
+---
+
+---
+
+# v6.0 — Security-focused overhaul (Nexus DLL mods only)
+
+v6.0 is a **breaking-change major**. The v5.x API is preserved as `[Obsolete]` back-compat — your existing v5.x mods keep working with a compile warning — but **new code should target the v6.0 API**. The change is large because the v5.x API had no per-mod identity, no path safety, no permission model, and no audit log. v6.0 adds all four.
+
+## What's new in v6.0
+
+1. **Per-mod identity.** `ModFrameworkActivator.OnActivate` mints an unforgeable `ModIdentity` for your mod at startup. Every privileged framework call takes your identity as the first argument.
+2. **Path safety.** `ModFileAccess` no longer accepts raw `string` paths. The only way to get a path is from a `SafePath` factory — four of them, one for each security policy.
+3. **22 fine-grained permission flags** + **4 named presets** (`ReadOnly`, `Patcher`, `ServiceProvider`, `ServiceConsumer`). Declared in `meta.tyd`. The framework rejects any privileged call whose required flag is not set.
+4. **Unforgeable event and service handles.** `EventKey` and `ServiceToken` are `readonly struct`s with `internal` constructors. Only the publisher can `Trigger` its own event. Only the registered service name can be claimed.
+5. **Framework strong-name signing.** The DLL is signed with a private key held by the author; the public key is committed. `FrameworkSignatureCheck` refuses to load the framework if the public key token doesn't match. Players can verify the framework DLL is the one published on Nexus.
+6. **Per-day audit log.** Every privileged call writes a line to `%persistentDataPath%/ModFramework/audit-YYYY-MM-DD.log` with the `modId`, the operation, the target, and the result. Visible in `output_log.txt` (via `Debug.Log` echo) and on disk. 30-day retention.
+
+## Installation
+
+v6.0 keeps the v5.1 single-DLL distribution model. One file: `ModFramework.dll` (~3.3 MB, signed, with 0Harmony 2.3.3 + Newtonsoft.Json 13.0.3 ILMerged). Drop it into:
+
+```
+<game>/Software Inc_Data/Managed/ModFramework.dll
+```
+
+The game auto-loads DLLs from `Managed/` on launch. No installer, no per-mod deployment, no NuGet.
+
+> **v6.1.1+:** the size above is the v6.0 build. As of v6.1.1 Newtonsoft.Json is removed (the framework uses Unity's `JsonUtility`) and the signed DLL is **~2.56 MB**. See the **v6.1 — hardening, in-game UI, and the four barriers** section below for the current installation and author rules.
+
+## Lifecycle: OnActivate / OnDeactivate
+
+Every `ModBehaviour` subclass implements `OnActivate()` (no parameters) and `OnDeactivate()` (no parameters). The v6.0 lifecycle is the v5.x one with `ModFrameworkActivator` calls added:
+
+```csharp
+using ModFramework.Core;
+using HarmonyLib;
+
+public class MyModBehaviour : ModBehaviour
+{
+    private ModIdentity _id;
+    private Harmony _harmony;
+    private EventKey _onPlayerJoinedKey;
+    private ServiceToken _myServiceToken;
+
+    public override void OnActivate()
+    {
+        // 1. Register with the framework. Returns an unforgeable ModIdentity.
+        _id = ModFrameworkActivator.OnActivate(this);
+        if (_id == null) return;  // framework refused (missing permission, etc.)
+
+        // 2. Set up your privileged operations using _id.
+        _harmony = ModHarmony.CreateAndPatchAll(_id);
+
+        // 3. Subscribe to whitelisted global events (e.g. OnGameSaved).
+        ModEvents.SubscribeGlobal(_id, GlobalEventKind.OnGameSaved, OnGameSaved);
+
+        // 4. Publish your own event (give the key to consumers via a static field).
+        _onPlayerJoinedKey = ModEvents.Publish(_id, "OnPlayerJoined");
+
+        // 5. Register a service (give the token to consumers via a static field).
+        _myServiceToken = ModServiceHost.Register(_id, "MyService", go => {
+            go.AddComponent<MyServiceComponent>();
+        });
+    }
+
+    public override void OnDeactivate()
+    {
+        // Tear down in reverse order.
+        if (_id != null)
+        {
+            if (_myServiceToken.OwnerModId == _id.ModId)
+                ModServiceHost.Unregister(_id, _myServiceToken);
+            if (_harmony != null)
+                ModHarmony.UnpatchAll(_id, _harmony);
+            ModFrameworkActivator.OnDeactivate(_id);
+        }
+    }
+
+    private void OnGameSaved(string savePath) {
+        Debug.Log("[MyMod] Save detected at " + savePath);
+    }
+}
+
+public static class MyModState
+{
+    // Consumers reach your events/services through these static fields.
+    public static EventKey PlayerJoinedKey;
+    public static ServiceToken MyServiceToken;
+}
+```
+
+> **Note:** The `OnActivate(this)` call resolves to `ModFrameworkActivator.OnActivate(ModController.DLLMod)`. If you hit a compile error, your mod is using an older `ModBehaviour` inheritance that doesn't bridge to `ModController.DLLMod` — see the `MODFRAMEWORK_MEMORY.md` v6.0.1 backlog for the planned `OnActivate(ModBehaviour)` convenience overload.
+
+## The 22 permission flags
+
+A mod's `meta.tyd` declares which flags it needs. The framework rejects any privileged call whose required flag is not set.
+
+| Group | Flag | Required by |
+|---|---|---|
+| File | `FileRead` | `ModFileAccess.ReadText`, `ReadBytes`, `ReadJson`, `TryReadJson`, `ToJsonString` |
+| File | `FileWrite` | `ModFileAccess.WriteText`, `WriteBytes`, `WriteJson` |
+| File | `FileAppend` | `ModFileAccess.AppendText` |
+| File | `FileDelete` | `ModFileAccess.Delete`, `DeleteIfExists` |
+| File | `FileDirectoryList` | `ModFileAccess.Exists`, `DirectoryExists`, `EnsureDirectory` |
+| File | `FileUserApproved` | `SafePath.GetUserApprovedPath` |
+| Harmony | `HarmonyRead` | `ModHarmony.CreateInstance`, `PatchCount` |
+| Harmony | `HarmonyPatch` | `ModHarmony.CreateAndPatchAll` |
+| Harmony | `HarmonyUnpatch` | `ModHarmony.UnpatchAll` |
+| Event | `EventSubscribe` | `ModEvents.Subscribe`, `SubscribeGlobal` |
+| Event | `EventPublish` | `ModEvents.Publish` |
+| Service | `ServiceRegister` | `ModServiceHost.Register`, `Unregister` |
+| Service | `ServiceConsume` | `ModServiceBridge.IsAvailable`, `Find`, `Send` |
+| Settings | `SettingsRead` | `ModSettings.Get*` |
+| Settings | `SettingsWrite` | `ModSettings.Set*` |
+| Settings | `SettingsDelete` | `ModSettings.DeleteAll` |
+| Misc | `GameReflection` | `ModUtils.GetSingleton` (deprecation planned v6.0.1) |
+| Misc | `GameEventWhitelist` | `ModEvents.PublishGlobal` |
+| Misc | `AuditLogRead` | (in-game audit log viewer) |
+| Misc | `AuditLogExport` | (in-game audit log export) |
+| Misc | `UserDialogPrompt` | `SafePath.GetUserApprovedPath` dialog |
+| Misc | `NetworkAccess` | (reserved for future HTTP/socket use — no v6.0 method) |
+
+### 4 named presets
+
+If your mod fits one of the four common cases, use a preset name in `meta.tyd`:
+
+| Preset | Flags | Typical mod |
+|---|---|---|
+| `ReadOnly` | `FileRead, FileDirectoryList, SettingsRead` | Info display, dashboard, statistics |
+| `Patcher` | `FileRead, FileWrite, FileDirectoryList, HarmonyRead, HarmonyPatch, HarmonyUnpatch, SettingsRead, SettingsWrite` | Most mods — game patches + per-mod data |
+| `ServiceProvider` | `ServiceRegister, SettingsRead, SettingsWrite` | Mod that exposes a service for other mods |
+| `ServiceConsumer` | `ServiceConsume, EventSubscribe, SettingsRead` | Mod that uses another mod's service |
+
+You can mix a preset with extra flags: `Permissions: Patcher, ServiceRegister, EventPublish`.
+
+If your `meta.tyd` has no `Permissions:` line, the framework defaults to `Patcher` and emits a `Debug.LogWarning`. v5.x mods that never declared permissions keep working.
+
+## Core types
+
+### ModIdentity
+
+```csharp
+public sealed class ModIdentity
+{
+    public string ModId { get; }         // e.g. "com.zicarius.mymod"
+    public string DisplayName { get; }   // e.g. "My Mod"
+    public string AssemblyHash { get; }  // SHA-256 of the calling mod's .dll
+    public Guid SessionNonce { get; }    // per-session GUID
+    public DateTime IssuedAt { get; }    // UTC time of OnActivate
+    public Permission Permissions { get; }
+}
+```
+
+The `ModIdentity` constructor is `internal`. Consuming code cannot `new ModIdentity(...)` — the only way to get one is `ModFrameworkActivator.OnActivate(...)`. The `SessionNonce` rotates every game launch (replay-attack prevention); the `AssemblyHash` detects mod DLL tampering.
+
+### SafePath + SafePathKind
+
+A `SafePath` is a validated file-system path. The only way to get one is from a factory method. Raw `string` paths are not accepted by `ModFileAccess`.
+
+```csharp
+public sealed class SafePath
+{
+    public string ResolvedAbsolute { get; }   // fully-resolved, no ".."
+    public SafePathKind Kind { get; }
+}
+
+public static SafePath GetModDataPathSafe(ModIdentity id, params string[] subPaths);
+public static SafePath GetPersistentDataPathSafe(ModIdentity id, params string[] subPaths);
+public static SafePath GetManagedPathSafe(ModIdentity id, string fileName);
+public static SafePath GetUserApprovedPath(ModIdentity id, string filePath);
+```
+
+| Factory | Resolves to |
+|---|---|
+| `GetModDataPathSafe(id, "sub", "file.txt")` | `<modFolder>/Data/sub/file.txt` |
+| `GetPersistentDataPathSafe(id, "sub", "file.txt")` | `%persistentDataPath%/Mods/<modId>/sub/file.txt` |
+| `GetManagedPathSafe(id, "0Harmony.dll")` | `<game>/Software Inc_Data/Managed/0Harmony.dll` (read-only) |
+| `GetUserApprovedPath(id, "C:\\...")` | Whatever the user approved via dialog (STUB in v6.0 — auto-grants with a warning) |
+
+The factory `subPaths` cannot contain `: * ? " < > |` or any path separators that would escape the root. The `ResolvedAbsolute` is always fully resolved with `Path.GetFullPath` and cannot contain `..`. Throws `ModPathException` on invalid input.
+
+### EventKey
+
+Unforgeable event identifier. A mod that publishes an event gets back an `EventKey`; only that mod can `Trigger` it later.
+
+```csharp
+public readonly struct EventKey : IEquatable<EventKey>
+{
+    public string OwnerModId { get; }
+    // ==, !=, Equals, GetHashCode built in
+}
+```
+
+Construction is internal. `ModEvents.Trigger(id, key, data)` throws `ModSecurityException` if `key.OwnerModId != id.ModId` — fixes the v5.x "any mod can fire any event" loophole.
+
+### ServiceToken
+
+Unforgeable service handle. A mod that registers a service gets back a `ServiceToken`; other mods must hold that token to find/send the service.
+
+```csharp
+public readonly struct ServiceToken : IEquatable<ServiceToken>
+{
+    public string ServiceName { get; }    // e.g. "MyService"
+    public string OwnerModId { get; }     // who registered it
+}
+```
+
+`ModServiceHost.Register` throws `ModSecurityException` if a service with the same name is already registered by a different mod — fixes the v5.x `GameObject.Find` name-collision hijack.
+
+## API surface by module
+
+### ModFrameworkActivator
+
+The single entry point. Call `OnActivate` in your `OnActivate` and `OnDeactivate` in your `OnDeactivate`.
+
+```csharp
+public static ModIdentity OnActivate(
+    ModController.DLLMod dllMod,
+    Assembly callingAssembly = null,
+    Permission explicitPermissions = Permission.None);
+
+public static void OnDeactivate(ModIdentity identity);
+```
+
+- `dllMod` — the game's `ModController.DLLMod` instance. In a `ModBehaviour` subclass, this is `this`.
+- `callingAssembly` — the mod's main assembly. Defaults to `Assembly.GetCallingAssembly()`.
+- `explicitPermissions` — bypass `meta.tyd` reading and use these flags directly. Useful for test mods.
+
+`OnActivate` reads `meta.tyd` to extract the `Permissions:` line, mints a `ModIdentity`, and registers it. Throws `ArgumentNullException` if `dllMod` is null. Throws `FrameworkSignatureException` if the framework DLL's public key token doesn't match `e0967644e3ffec06`. `OnDeactivate` is idempotent (safe to call with a null `identity`).
+
+### ModFileAccess
+
+File I/O with per-op permission check. All v6.0 methods take `ModIdentity` + `SafePath` as the first two arguments.
+
+| Method | Requires | Returns |
+|---|---|---|
+| `ReadText(id, path)` | `FileRead` | `string` (null on error) |
+| `ReadBytes(id, path)` | `FileRead` | `byte[]` (null on error) |
+| `ReadJson<T>(id, path)` | `FileRead` | `T` (null on error) |
+| `TryReadJson<T>(id, path, out result)` | `FileRead` | `bool` |
+| `WriteText(id, path, content, createDirIfMissing=true)` | `FileWrite` | `bool` |
+| `AppendText(id, path, content, createDirIfMissing=true)` | `FileAppend` | `bool` |
+| `WriteBytes(id, path, data, createDirIfMissing=true)` | `FileWrite` | `bool` |
+| `WriteJson<T>(id, path, data, prettyPrint=true)` | `FileWrite` | `bool` |
+| `ToJsonString<T>(id, data, prettyPrint=true)` | `FileRead` (cheapest) | `string` |
+| `Delete(id, path)` | `FileDelete` | `bool` |
+| `DeleteIfExists(id, path)` | `FileDelete` | `bool` |
+| `Exists(id, path)` | `FileDirectoryList` | `bool` |
+| `DirectoryExists(id, path)` | `FileDirectoryList` | `bool` |
+| `EnsureDirectory(id, path)` | `FileDirectoryList` | `void` |
+
+All write methods call `EnsureDirectory` first (if `createDirIfMissing=true`). All errors are caught internally, logged via `Debug.LogWarning`, and return `false` / `null` — the framework never throws on I/O failure, only on permission or path errors.
+
+Example:
+```csharp
+SafePath path = SafePath.GetModDataPathSafe(_id, "session.json");
+if (!ModFileAccess.WriteJson(_id, path, new SessionData { Day = 42 }))
+{
+    Debug.LogWarning("Failed to write session data");
+}
+```
+
+**v5.x back-compat:** All the old `string`-based overloads are kept with `[Obsolete]` attributes. They still work (no compile error) but emit a `CS0618` warning. They deliberately skip the permission check — they are emergency back-compat only. See `MIGRATION_v5_to_v6.md` for the v6.0 replacements.
+
+### ModHarmony
+
+Centralized Harmony wrapper. v6.0 methods take `ModIdentity`; the harmony ID is derived from the identity.
+
+| Method | Requires | Returns |
+|---|---|---|
+| `CreateInstance(id)` | `HarmonyRead` | `Harmony` (null on error) |
+| `CreateAndPatchAll(id, assembly=null)` | `HarmonyPatch` | `Harmony` (null on error) |
+| `UnpatchAll(id, harmony)` | `HarmonyUnpatch` | `void` |
+| `PatchCount(id, harmony)` | `HarmonyRead` | `int` |
+
+Harmony ID derivation: `NormalizeId(id.ModId)` — prefixes with `com.` if not already present. So `id.ModId = "zicarius.mymod"` becomes `"com.zicarius.mymod"`.
+
+`PatchAll` uses Harmony's `PatchClassProcessor` internally, which has a known issue with **static methods on `static class` targets** (e.g. `GameData.GetProjectEffectiveness`). If you hit this, switch to manual `Harmony.Patch()` calls. The `LimitlessTeams` v1.1.4 release has a working pattern.
+
+Example:
+```csharp
+_harmony = ModHarmony.CreateAndPatchAll(_id);
+Debug.Log("Patched " + ModHarmony.PatchCount(_id, _harmony) + " methods");
+```
+
+### ModEvents + GlobalEventKind
+
+Pub/sub event bus. v6.0 uses `EventKey` (mod-to-mod) and `GlobalEventKind` (whitelisted game lifecycle events).
+
+| Method | Requires |
+|---|---|
+| `Publish(id, eventName, data=null)` | `EventPublish` (returns `EventKey`) |
+| `Subscribe(id, key, handler)` | `EventSubscribe` |
+| `Unsubscribe(id, key, handler)` | (any) |
+| `Trigger(id, key, data=null)` | (any — but throws `ModSecurityException` if `key.OwnerModId != id.ModId`) |
+| `PublishGlobal(id, kind, data=null)` | `GameEventWhitelist` |
+| `SubscribeGlobal(id, kind, handler)` | `EventSubscribe` |
+| `UnsubscribeGlobal(id, kind, handler)` | (any) |
+
+**Whitelisted global event kinds:** `OnGameSaved`, `OnGameLoaded`, `OnCompanyFounded`, `OnSoftwareReleased`, `OnDayPassed`, `OnMonthPassed`.
+
+`Publish` fires the event once at publish time (if `data != null`). Subscribers that `Subscribe` after `Publish` will not receive the initial fire — events are point-in-time, not retained. This matches v5.x semantics.
+
+Example (publisher):
+```csharp
+EventKey key = ModEvents.Publish(_id, "OnPlayerJoined");
+// Give the key to consumers via a public static field on your mod class
+public static EventKey PlayerJoinedKey;
+```
+
+Example (consumer):
+```csharp
+ModEvents.Subscribe(myId, MyOtherMod.PlayerJoinedKey, args => {
+    Debug.Log("Player joined!");
+});
+```
+
+### ModServiceHost + ModServiceBridge
+
+Cross-mod service registry. v6.0 uses `ServiceToken` to prevent name-collision spoofing.
+
+**Provider (`ModServiceHost`):**
+
+| Method | Requires |
+|---|---|
+| `Register(id, serviceName, configure=null)` | `ServiceRegister` (returns `ServiceToken`) |
+| `Unregister(id, token)` | `ServiceRegister` |
+
+**Consumer (`ModServiceBridge`):**
+
+| Method | Requires |
+|---|---|
+| `IsAvailable(id, token)` | `ServiceConsume` |
+| `Find(id, token)` | `ServiceConsume` |
+| `Send(id, token, methodName, arg=null, options=RequireReceiver)` | `ServiceConsume` |
+
+`Register` creates a new `GameObject(serviceName)` if none exists and runs the optional `configure` callback on it. Throws `ModSecurityException` on name collision. The `Send` method uses Unity's `GameObject.SendMessage` — the receiver must have a method with the matching name.
+
+### ModSafety, ModUtils, ModDependencies, ModLoader
+
+These four v5.1 utility classes got `[ModFrameworkPublicAPI("v6.0")]` markers in v6.0 but their **public API is unchanged from v5.1**. See the v5.1 section above for usage. `ModSafety.Try` and `ModDependencies.ShowMissingMessage` now also write to the audit log when they catch a failure.
+
+### AuditLog
+
+Append-only log of every privileged framework call. Located at `%persistentDataPath%/ModFramework/audit-YYYY-MM-DD.log` (one file per day, 30-day retention). Every privileged call writes a line; the line is also `Debug.Log`'d so it shows up in `output_log.txt`.
+
+```csharp
+public static class AuditLog
+{
+    public static void Log(string modId, string displayName, string operation, string target, string result, string notes);
+    public static string GetLogPath(DateTime day);
+    public static void PurgeOldLogs();
+}
+```
+
+You can call `AuditLog.Log` directly to log your own mod's non-framework events (e.g. "MYMOD_POLL_START"). This makes the audit log a single source of truth for "what did this mod do?".
+
+**Line format:** `[timestamp] [modId] [displayName] operation target result notes`
+
+Example line:
+```
+[2026-07-16 14:23:01] [com.zicarius.limitlessteams] [LimitlessTeams] FILE_WRITE [C:\...\Mods\LimitlessTeams\Data\settings.json] OK [124 bytes]
+```
+
+An in-game "Mod Audit Log" window is planned for v6.0.1. Today the log is on disk + in `Debug.Log`.
+
+### SecurityGuards + FrameworkSignatureCheck
+
+These are internal. You don't call them directly. `SecurityGuards.RequirePermission` is the per-op permission check (24 call sites across 4 v6.0 API surface files). `FrameworkSignatureCheck.RequireValid` is the static-ctor check that compares the loaded framework DLL's public key token against the hard-coded `e0967644e3ffec06`.
+
+## Exception types
+
+| Exception | Thrown by | Cause |
+|---|---|---|
+| `ModPathException` | `SafePath` factories | Path is relative, contains illegal characters, contains `..`, or doesn't resolve |
+| `ModPermissionException` | `SecurityGuards.RequirePermission` | Identity lacks the required `Permission` flag |
+| `ModSecurityException` | `ModEvents.Trigger` (owner mismatch), `ModServiceHost.Register` (name collision) | Tried to use another mod's `EventKey` / `ServiceToken` |
+| `FrameworkSignatureException` | `FrameworkSignatureCheck.RequireValid` | Framework DLL's public key token doesn't match |
+
+`ModPermissionException` carries rich data — `RequiredPermission`, `GrantedPermissions`, and the identity's `ModId`. Log these to your in-game error UI so the player can see which mod is missing which permission.
+
+## Best practices
+
+1. **Always use a `ModIdentity` for the lifetime of your mod.** Store `_id` in a field on your `ModBehaviour`. Call `OnActivate` in `OnActivate` and `OnDeactivate` in `OnDeactivate`. Never pass `null` to a privileged framework method.
+2. **Use the smallest permission set.** Start with the closest preset (`Patcher` for most mods). Add only the flags you actually use. Fewer flags = more trust from the player.
+3. **Wrap risky code in `ModSafety.Try`.** The number one rule of modding Software Inc: don't break the game's loops. Wrap your `Update()` logic, UI callbacks, and risky API calls in `ModSafety.Try` (or `ThrottledErrorHandler` for per-frame code).
+4. **Cache `EventKey` / `ServiceToken` in public static fields.** Other mods need to subscribe to your events and find your services. Publish the keys/tokens as `public static` readonly fields on your mod class.
+5. **Don't store unencrypted secrets in mod data.** The audit log can see every file write. Don't write passwords, API tokens, or other secrets.
+6. **C# 5 portability for the Workshop.** The framework's own code is C# 5 (no `?.`, no `$"..."`, no `nameof`, no auto-property initializers). Your consumer code can be any C# version.
+7. **Always call `OnDeactivate`.** Forgetting it leaves your identity in `ModRegistry` and your patches live. If the player disables and re-enables your mod in the in-game mod manager, the stale identity causes a permission mismatch.
+8. **Use `SafePath` sub-paths, not absolute paths.** `SafePath.GetModDataPathSafe(id, "saves", "session.json")` is portable across machines and mod install locations.
+9. **Audit-log your own non-framework events.** Use `AuditLog.Log(myId.ModId, myId.DisplayName, "MYMOD_POLL_START", "", "OK", "")` for your own mod events. The audit log becomes a single source of truth.
+10. **Don't call v4.x `[Obsolete]` classes in new code.** The `[Obsolete]` back-compat is for emergency hotfixes on v5.x mods only. New code uses the v6.0 API. The v4.x single-file classes (`UIHelper`, `ModLogger`, `ModSettings` v4.x, `Notifications`) are on the removal track for v6.1.
+
+## Build, deploy, verify
+
+### Build (framework authors)
+
+```powershell
+cd modframework
+.\Build-ModFramework.ps1
+```
+
+The build script:
+1. Pre-checks that `_secure/ModFramework.snk` exists.
+2. Runs `msbuild ModFramework.csproj /p:Configuration=Release` (signs with the strong-name key).
+3. ILMerges 0Harmony 2.3.3.0 and Newtonsoft.Json 13.0.3 into the signed DLL. Uses `/ndebug` to avoid the `ISymUnmanagedWriter.Close()` catastrophic failure when `DebugType=pdbonly` is set on Release.
+4. Post-checks the public key token is `e0967644e3ffec06` via `sn.exe -T`.
+5. Outputs to `modframework/bin/Release/ModFramework.dll`.
+
+### Deploy (you, for your mod)
+
+```powershell
+Copy-Item modframework/bin/Release/ModFramework.dll "E:\SteamLibrary\steamapps\common\Software Inc\Software Inc_Data\Managed\ModFramework.dll"
+```
+
+The game auto-loads DLLs from `Managed/` on launch.
+
+### Verify (in-game)
+
+The framework self-verifies on first privileged call:
+1. `FrameworkSignatureCheck.RequireValid` confirms the public key token matches.
+2. `ModFrameworkActivator.OnActivate` reads your mod's `meta.tyd` and checks the `Permissions:` line.
+3. Every privileged call writes an audit log line.
+4. The audit log is at `%persistentDataPath%/ModFramework/audit-YYYY-MM-DD.log`. Open the latest file to see your mod's operations.
+
+# v6.1 — hardening, in-game UI, and the four barriers
+
+v6.1 builds on v6.0. It closes the last `[Obsolete]` bypass, ships the in-game
+audit UI, removes the Newtonsoft dependency, and — most importantly for mod
+authors — makes explicit the four barriers every v6.1 mod must clear.
+
+## What changed since v6.0
+
+- **v6.1.0** — the v5.x `[Obsolete]` back-compat wrappers (28 of them in `Core/`) are **deleted**, and the 6 v4.x single-file classes (`UIHelper`, `ModLogger`, `ModEvents`, `Notifications`, `ModSettings`, `ModUtils`) are now `internal`. The wrappers had skipped `SecurityGuards.RequirePermission`, so a malicious DLL could do file I/O / events / services with no declared permission. That bypass is now closed (verified by `tests/ModFrameworkV61BypassTest.cs`, which produces 20 expected compile errors). `AssemblyVersion` 6.0.1.0 → 6.1.0.0; strong-name token unchanged (`e0967644e3ffec06`). Workshop CS mods that relied on the wrappers must pin to v6.0.0 — see [MIGRATION_v5_to_v6.md](MIGRATION_v5_to_v6.md).
+- **v6.1.0** — in-game **Mod Audit Log** + **Mod permissions** windows, hosted by a tiny shim mod (`ModFrameworkSettings/`). The framework does all the UI work; the shim just registers the Mods-tab entry.
+- **v6.1.1** — **Newtonsoft.Json removed.** Its 13.x static initializer throws under the game's Unity 2018.4 Mono runtime, so every `WriteJson` failed silently and settings never persisted. `ModFileAccess` now uses Unity's engine-native `JsonUtility`. The DLL is ~700 KB smaller (~2.56 MB). **Settings classes must be `[Serializable]` with public fields** — no `Dictionary`, no properties, no top-level arrays (wrap arrays in a `[Serializable]` container class).
+- **v6.1.2** — in-game Settings window no longer clips long permission lists / audit logs (`OptionsWindow.AddModOption` measures the scroll region once from direct children; fixed with zero-size containers, `CanvasGroup.alpha` tab toggling, and per-label self-sizing). Verified in-game 2026-07-17.
+
+## Installation (v6.1)
+
+One file: `ModFramework.dll` (signed, **~2.56 MB** as of v6.1.1, with 0Harmony 2.3.3 ILMerged — Newtonsoft is no longer bundled). Drop it into:
+
+```
+<game>/Software Inc_Data/Managed/ModFramework.dll
+```
+
+Optionally add the `ModFrameworkSettings` shim mod to `DLLMods/` for the in-game audit/permissions windows.
+
+## Working with the v6.1 Security Barriers
+
+v6.1 is stricter than v5.x on purpose. Coming from the old API, here are the
+four barriers you now have to satisfy — and exactly how to clear each.
+
+### Barrier 1 — Your mod MUST be a pre-compiled DLL mod
+
+The game's in-game C# compiler (`DynamicCSharp`) has a hardcoded assembly
+whitelist that does **not** include `ModFramework.dll`. A **source mod** that
+does `using ModFramework.Core;` fails to compile with:
+
+```
+CS0246: The type or namespace name 'ModFramework' could not be found
+```
+
+**Fix:** ship your mod as a **pre-compiled DLL**. Build a `.csproj` that
+references `ModFramework.dll` from your local `Managed/` folder, then drop the
+built DLL in `DLLMods/<YourMod>/` alongside its `meta.tyd`. The regular .NET
+loader resolves the reference and the in-game compiler is bypassed entirely.
+The `ModFrameworkExample` and `ModFrameworkSettings` mods both ship this way —
+use `ModFrameworkExample/` as your copy-paste starting point.
+
+### Barrier 2 — Declare permissions in meta.tyd, or the call throws
+
+Every privileged call checks a permission flag before doing anything. Call
+`ModFileAccess.WriteText(...)` without `FileWrite` declared and you get a
+`ModPermissionException` at runtime (audit-logged as a DENY). Declare what you
+need in `meta.tyd`:
+
+```
+Permissions: Patcher
+```
+
+Presets expand to flag sets. `Patcher` =
+`FileRead, FileWrite, FileDirectoryList, HarmonyRead, HarmonyPatch, HarmonyUnpatch, SettingsRead, SettingsWrite`
+— note it does **NOT** include `FileDelete`. If your mod deletes files, append
+the flag explicitly:
+
+```
+Permissions: Patcher, FileDelete, ServiceRegister
+```
+
+If `meta.tyd` has no `Permissions:` line, the framework defaults to `Patcher`
+and logs a warning. See "The 22 permission flags" above for the full table.
+
+### Barrier 3 — Get a ModIdentity, pass it to every privileged call
+
+You can't call the file / event / service / Harmony APIs anonymously anymore.
+Call `ModFrameworkActivator.OnActivate(this)` once in `OnActivate`. It:
+
+1. reads your `meta.tyd` `Permissions:` line,
+2. verifies the framework's strong-name signature,
+3. mints a per-session `ModIdentity` (unforgeable — `internal` constructor), and
+4. writes an `ACTIVATE` line to the audit log.
+
+Pass that identity as the **first argument** of every privileged call. If it
+returns `null`, the framework refused you (bad signature, or the caller isn't a
+registered DLL mod) — bail out immediately:
+
+```csharp
+myId = ModFrameworkActivator.OnActivate(this);
+if (myId == null) return;   // refused — do not proceed
+```
+
+### Barrier 4 — File I/O needs a SafePath, not a raw string
+
+`ModFileAccess` no longer accepts raw path strings. You get a `SafePath` from
+one of four allowlisted factories:
+
+| Factory | Root | Access |
+|---|---|---|
+| `SafePath.GetModDataPathSafe(id, ...)` | your mod's `Data/` folder | read/write |
+| `SafePath.GetPersistentDataPathSafe(id, ...)` | `%persistentDataPath%/Mods/<modId>/` | read/write |
+| `SafePath.GetManagedPathSafe(id, file)` | game's `Managed/` folder | read-only |
+| `SafePath.GetUserApprovedPath(id, path)` | a location the user explicitly approves | read/write |
+
+Any path containing `..`, a drive-relative segment, or one of `: * ? " < > |`,
+or resolving outside these roots, throws `ModPathException`. This is what closes
+the "write to `C:\Windows\System32`" attack — you literally cannot construct a
+`SafePath` pointing there.
+
+### The payoff
+
+Once you clear the four barriers, every file write, event, service call, and
+Harmony patch your mod makes is **audit-logged** — visible in the in-game Audit
+Log tab and in `%persistentDataPath%/ModFramework/audit-YYYY-MM-DD.log` — so
+users can see exactly what your mod did and revoke trust if they don't like it.
+
+Serialize settings with Unity's `JsonUtility`: mark the settings class
+`[Serializable]`, use public fields only (no `Dictionary`, no properties, no
+top-level arrays). The framework no longer bundles Newtonsoft.
+
+## File Layout After v6.0
+
+```
+ModFramework/
++- ModFramework.cs              # v6.0 header comment
++- ModFramework.csproj          # +strong-name signing, +v6.0 Core/ entries
++- Build-ModFramework.ps1       # standalone build + ILMerge script
++- README.md
++- DOCUMENTATION.md             # this file
++- MIGRATION_v5_to_v6.md        # v5.x -> v6.0 migration guide
++- MODFRAMEWORK_MEMORY.md       # design decisions + lessons learned
++- NEXUS_DESCRIPTION.bbcode     # raw BBCode for the Nexus page
+|
++- Core/
+|  +- ModFrameworkPublicAPI.cs  # the [ModFrameworkPublicAPI("v6.0")] attribute
+|  +- ModIdentity.cs            # the unforgeable per-mod identity
+|  +- Permission.cs             # the 22 fine-grained flags
+|  +- PermissionPresets.cs      # the 4 named presets
+|  +- SafePath.cs               # the validated path wrapper
+|  +- EventKey.cs               # the unforgeable event handle
+|  +- ServiceToken.cs           # the unforgeable service handle
+|  +- ModRegistry.cs            # internal registry of identities
+|  +- SecurityGuards.cs         # the per-op permission check
+|  +- FrameworkSignatureCheck.cs# the public key token check
+|  +- AuditLog.cs               # the per-day audit log writer
+|  +- ModFrameworkActivator.cs  # the single OnActivate / OnDeactivate entry point
+|  +- ModFileAccess.cs          # the file I/O API
+|  +- ModHarmony.cs             # the Harmony wrapper
+|  +- ModEvents.cs              # the EventKey + GlobalEventKind API
+|  +- ModServiceHost.cs         # the service registration (provider side)
+|  +- ModServiceBridge.cs       # the service consumption (consumer side)
+|  +- ModSafety.cs              # unchanged from v5.1
+|  +- ModUtils.cs               # unchanged from v5.1
+|  +- ModDependencies.cs        # unchanged from v5.1
+|  +- ModLoader.cs              # unchanged from v5.1
+|
++- _secure/
+|  \- ModFramework.snk          # private strong-name key (gitignored)
++- keys/
+|  +- ModFramework.pub          # public strong-name key (committed)
+|  +- README.md                 # verification instructions
+|
++- Properties/
+|  \- AssemblyInfo.cs           # v6.0.0.0
+|
++- meta.tyd_template            # template with Permissions: Patcher
+|
++- GameData/                    # unchanged from v5.x
++- UI/                          # unchanged from v5.x
++- Harmony/                     # 0Harmony 2.3.3 (source for ILMerge)
++- Vendor/                      # Newtonsoft.Json 13.0.3 (source for ILMerge)
++- Tools/                       # ILMerge setup
+\- Scaffolding/                 # CreateMod.ps1, CreateModGUI.ps1, Templates/
+```
+
+## Need help?
+
+- Migrating from v5.x? See [`MIGRATION_v5_to_v6.md`](MIGRATION_v5_to_v6.md) — the before/after guide for every API change.
+- Looking for a working mod that uses every v6.0 API? See [`../ModFrameworkExample/`](../ModFrameworkExample/) — a real published Nexus mod scaffolded as the canonical reference.
 

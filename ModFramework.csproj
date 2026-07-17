@@ -11,6 +11,12 @@
     <AssemblyName>ModFramework</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <!-- Strong-name signing (v6.0). The keypair lives at ../../_secure/ModFramework.snk (gitignored).
+         The public key is committed at keys/ModFramework.pub. Build-ModFramework.ps1 cross-checks
+         the .pub matches the .snk before building. See modframework/keys/README.md. -->
+    <AssemblyOriginatorKeyFile>..\_secure\ModFramework.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>true</SignAssembly>
+    <DelaySign>false</DelaySign>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -42,6 +48,11 @@
       <HintPath>E:\SteamLibrary\steamapps\common\Software Inc\Software Inc_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <!-- v6.1.1: JsonUtility lives in this module on Unity 2018.4, not CoreModule. -->
+    <Reference Include="UnityEngine.JSONSerializeModule">
+      <HintPath>E:\SteamLibrary\steamapps\common\Software Inc\Software Inc_Data\Managed\UnityEngine.JSONSerializeModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine.IMGUIModule">
       <HintPath>E:\SteamLibrary\steamapps\common\Software Inc\Software Inc_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
     </Reference>
@@ -65,38 +76,54 @@
       <HintPath>Harmony\0Harmony.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>Vendor\Newtonsoft.Json.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
+    <!-- v6.1.1: Newtonsoft.Json reference removed. JSON now uses Unity's native
+         JsonUtility (see Core/ModFileAccess.cs). Newtonsoft 13.0.3 failed its
+         JsonWriter static init under Unity 2018.4 Mono, breaking all WriteJson. -->
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ModFramework.cs" />
-    <!-- v5.x subfolder entries temporarily disabled (rolled back to v4.x
-         single-file layout) so MoreCompanies v2.0 and v3.0 can build
-         against the legacy ModLogger / ModSettings / Notifications / UIHelper
-         classes that the v5.x refactor removed. Re-enable when mods are
-         ported to the v5.x native API (Debug.Log / this.SaveSetting / etc). -->
-    <!--
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <!-- v6.0 security foundation (Phase 0) — 11 new type skeletons + 1 attribute.
+         The v5.x subfolder entries (ModFileAccess, ModHarmony, etc.) are still
+         temporarily disabled below to keep the v4.x single-file layout working
+         for MoreCompanies v3.0. They will be re-enabled + reworked to take
+         ModIdentity + SafePath in Phase 1. -->
+    <Compile Include="Core\ModFrameworkPublicAPI.cs" />
+    <Compile Include="Core\ModIdentity.cs" />
+    <Compile Include="Core\SafePath.cs" />
+    <Compile Include="Core\EventKey.cs" />
+    <Compile Include="Core\ServiceToken.cs" />
+    <Compile Include="Core\Permission.cs" />
+    <Compile Include="Core\PermissionPresets.cs" />
+    <Compile Include="Core\PermissionParser.cs" />
+    <Compile Include="Core\ModSecurityException.cs" />
+    <Compile Include="Core\ModPathException.cs" />
+    <Compile Include="Core\ModPermissionException.cs" />
+    <Compile Include="Core\AuditLog.cs" />
+    <!-- v6.0 P0 layer (Phase 1): ModRegistry + signature check + activator + guards -->
+    <Compile Include="Core\ModRegistry.cs" />
+    <Compile Include="Core\FrameworkSignatureCheck.cs" />
+    <Compile Include="Core\ModFrameworkActivator.cs" />
+    <Compile Include="Core\SecurityGuards.cs" />
+    <!-- v6.0 re-enabled v5.x subfolder files. Now includes D5 ModServiceHost/Bridge (ServiceToken). -->
+    <Compile Include="Core\ModFileAccess.cs" />
+    <Compile Include="Core\ModHarmony.cs" />
+    <Compile Include="Core\ModServiceBridge.cs" />
+    <!-- v6.0 D4: ModEvents v6.0 (EventKey + per-op permission + global whitelist). -->
+    <Compile Include="Core\ModEvents.cs" />
+    <!-- v6.0 re-enabled v5.x utility files (Phase 2 follow-ups).
+         ModSafety, ModUtils, ModDependencies, ModLoader are all marked
+         [ModFrameworkPublicAPI("v6.0")] and are read-only utilities
+         (no permission check needed). ModDependencies has audit-log
+         hooks on ShowMissingMessage. -->
     <Compile Include="Core\ModSafety.cs" />
     <Compile Include="Core\ModUtils.cs" />
     <Compile Include="Core\ModDependencies.cs" />
-    <Compile Include="Core\ModFileAccess.cs" />
     <Compile Include="Core\ModLoader.cs" />
-    <Compile Include="Core\ModHarmony.cs" />
-    <Compile Include="Core\ModServiceBridge.cs" />
-    <Compile Include="GameData\ModCompanyHelper.cs" />
-    <Compile Include="GameData\ModEmployeeHelper.cs" />
-    <Compile Include="GameData\ModMarketHelper.cs" />
-    <Compile Include="GameData\ModProductHelper.cs" />
-    <Compile Include="UI\CustomAccordion.cs" />
-    <Compile Include="UI\CustomCardLayout.cs" />
-    <Compile Include="UI\CustomCharts.cs" />
-    <Compile Include="UI\CustomContextMenu.cs" />
-    <Compile Include="UI\CustomNodeGraph.cs" />
-    <Compile Include="UI\CustomSplitPane.cs" />
-    <Compile Include="UI\CustomUIParser.cs" />
-    -->
+    <Compile Include="UI\ModFrameworkSettingsWindow.cs" />
+    <!-- v5.x subfolder entries still disabled: GameData/ and UI/ helpers
+         are not part of the v6.0 API surface. They will be re-enabled
+         when a consuming mod actually needs them. -->
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Properties\" />
@@ -135,10 +162,9 @@
     <ManagedDir Condition=" '$(ManagedDir)' == '' ">E:\SteamLibrary\steamapps\common\Software Inc\Software Inc_Data\Managed</ManagedDir>
   </PropertyGroup>
   <Target Name="ILMergeAssemblies" AfterTargets="Build" Condition="'$(ILMergeEnabled)' == 'true' AND Exists('$(ILMergePath)') AND '$(Configuration)' == 'Release'">
-    <Message Text="=== ILMerge step: merging 0Harmony and Newtonsoft.Json INTO ModFramework.dll ===" Importance="high" />
-    <Exec Command="&quot;$(ILMergePath)&quot; /lib:&quot;$(ManagedDir)&quot; /out:&quot;$(OutDir)ModFramework.dll&quot; /targetplatform:v4 /internalize:&quot;$(MSBuildProjectDirectory)\Tools\ilmerge\ilmerge.exclude&quot; &quot;$(OutDir)ModFramework.dll&quot; &quot;$(OutDir)0Harmony.dll&quot; &quot;$(OutDir)Newtonsoft.Json.dll&quot;" />
+    <Message Text="=== ILMerge step: merging 0Harmony INTO ModFramework.dll ===" Importance="high" />
+    <Exec Command="&quot;$(ILMergePath)&quot; /lib:&quot;$(ManagedDir)&quot; /keyfile:&quot;$(MSBuildProjectDirectory)\..\_secure\ModFramework.snk&quot; /out:&quot;$(OutDir)ModFramework.dll&quot; /targetplatform:v4 /internalize:&quot;$(MSBuildProjectDirectory)\Tools\ilmerge\ilmerge.exclude&quot; &quot;$(OutDir)ModFramework.dll&quot; &quot;$(OutDir)0Harmony.dll&quot;" />
     <Delete Files="$(OutDir)0Harmony.dll" />
-    <Delete Files="$(OutDir)Newtonsoft.Json.dll" />
     <Message Text="=== ILMerge complete. ModFramework.dll is the single shippable artifact. ===" Importance="high" />
   </Target>
   <Target Name="ILMergeWarning" AfterTargets="Build" Condition="'$(ILMergeEnabled)' == 'true' AND '$(Configuration)' == 'Release' AND !Exists('$(ILMergePath)')">

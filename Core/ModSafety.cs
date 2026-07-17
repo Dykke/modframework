@@ -1,3 +1,24 @@
+// ModSafety.cs
+// ModFramework v6.0
+//
+// A robust utility for running mod code safely.
+// Wraps actions in try/catch blocks that beautifully log errors directly
+// to the game console without causing game-breaking chain reactions.
+//
+// The number one rule of modding Software Inc: Don't break the original game's loops.
+// Wrap your UI callbacks, Update logic, and risky API calls in ModSafety.Try().
+//
+// v6.0 changes:
+//   - Class is marked with [ModFrameworkPublicAPI("v6.0")] — it's part of the
+//     curated v6.0 public API surface.
+//   - Caught errors are now also written to the framework's AuditLog (in
+//     addition to Debug.LogError). The audit-log line is tagged with
+//     "<unattributed>" because ModSafety doesn't know which mod called it —
+//     mods that want their errors attributed to their ModIdentity should
+//     wrap their code in their own try/catch and call AuditLog.Log directly.
+//   - No permission check is needed (this is a read-only utility; no
+//     privileged operations).
+
 using System;
 using UnityEngine;
 
@@ -5,14 +26,20 @@ namespace ModFramework.Core
 {
     /// <summary>
     /// A robust utility for running mod code safely.
-    /// Wraps actions in try/catch blocks that beautifully log errors directly 
+    /// Wraps actions in try/catch blocks that beautifully log errors directly
     /// to the game console without causing game-breaking chain reactions.
     ///
     /// The number one rule of modding Software Inc: Don't break the original game's loops.
     /// Wrap your UI callbacks, Update logic, and risky API calls in ModSafety.Try().
+    ///
+    /// v6.0: caught errors are also written to the framework's audit log so the
+    /// player can see them in the "Mod Audit Log" in-game window.
     /// </summary>
+    [ModFrameworkPublicAPI("v6.0", Reason = "Safe error handling for mod code")]
     public static class ModSafety
     {
+        private const string Tag = "[ModSafety]";
+
         /// <summary>
         /// Try to execute an action. If it throws an exception, it is caught and
         /// logged safely.
@@ -106,15 +133,26 @@ namespace ModFramework.Core
         {
             if (!condition)
             {
-                string warning = $"[ModFramework] ASSERT FAILED: {message}";
+                string warning = Tag + " ASSERT FAILED: " + message;
                 Debug.LogWarning(warning);
+                // v6.0: also write to audit log so the player can see soft-fail signals
+                // in the in-game "Mod Audit Log" window.
+                try { AuditLog.Log("<unattributed>", "<unattributed>", "ASSERT_FAILED", message, "WARN", ""); }
+                catch { /* AuditLog may not be initialized yet in very early calls */ }
             }
         }
 
         private static void LogError(string context, Exception ex)
         {
-            string errorMessage = $"[ModFramework] ERROR in {context}:\n{ex.Message}\n{ex.StackTrace}";
+            string errorMessage = Tag + " ERROR in " + context + ":\n" + ex.Message + "\n" + ex.StackTrace;
             Debug.LogError(errorMessage);
+            // v6.0: also write to audit log so the player can see caught errors in
+            // the in-game "Mod Audit Log" window. We use a sentinel "<unattributed>"
+            // because ModSafety doesn't know which mod's code threw the exception.
+            // Mods that want their errors attributed to their ModIdentity should
+            // wrap their code in their own try/catch and call AuditLog.Log directly.
+            try { AuditLog.Log("<unattributed>", "<unattributed>", "ERROR_CAUGHT", context, "ERROR", ex.GetType().Name + ": " + ex.Message); }
+            catch { /* AuditLog may not be initialized yet in very early calls */ }
         }
     }
 }

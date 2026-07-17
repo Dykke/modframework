@@ -1,4 +1,11 @@
 Name        {MOD_NAME}
-Description "A new mod created with ModFramework v4."
+Description "A new mod created with ModFramework v6.0."
 Author      YourNameHere
 SteamName   {MOD_NAME}
+; v6.0 security model — declare every permission the mod needs.
+; Use a preset name (Patcher / ReadOnly / ServiceProvider / ServiceConsumer) or a
+; comma-separated list of individual flags. See modframework/keys/README.md and
+; modframework/Core/Permission.cs for the full list. Unknown flag names = the
+; mod will not load.
+Permissions Patcher
+

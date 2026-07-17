@@ -1,12 +1,13 @@
 // ModDependencies.cs
-// ModFramework v5.1
+// ModFramework v6.0
 //
 // Dependency declaration and verification system.
 //
 // USAGE:
-//   In your mod's Initialize(parentMod), call:
+//   In your mod's OnActivate (after ModFrameworkActivator.OnActivate), call:
 //
-//       ModDependencies.VerifyOrWarn(parentMod,
+//       ModIdentity id = ModFrameworkActivator.OnActivate(this);
+//       ModDependencies.VerifyOrWarn(id, this,
 //           new ModDependency { Name = "0Harmony.dll",     Kind = ModDependencyKind.File, Severity = ModDependencySeverity.Required },
 //           new ModDependency { Name = "ModFramework.dll", Kind = ModDependencyKind.File, Severity = ModDependencySeverity.Required },
 //           new ModDependency { Name = "SomeOptionalMod",  Kind = ModDependencyKind.Mod,  Severity = ModDependencySeverity.Optional, DownloadUrl = "https://twitch.tv/..." }
@@ -16,6 +17,18 @@
 // explaining what's wrong and where to get it. The mod author is expected
 // to abort their own initialization in that case (the mod will still
 // load — they need to be defensive about it).
+//
+// v6.0 changes:
+//   - Class is marked with [ModFrameworkPublicAPI("v6.0")] — it's part of
+//     the curated v6.0 public API surface.
+//   - ShowMissingMessage / VerifyOrWarn now write an audit log entry so
+//     the player can see which mod declared which missing dep in the
+//     in-game "Mod Audit Log" window.
+//   - No permission check is needed (this is a read-only utility: it only
+//     checks File.Exists / Directory.Exists / GameObject.Find; no privileged
+//     operations).
+//   - C# 5 compatibility: removed C# 6+ string interpolation in favor of
+//     string concatenation (the v5.x code used $"..." which is not C# 5).
 
 using System;
 using System.Collections.Generic;
@@ -24,6 +37,7 @@ using UnityEngine;
 
 namespace ModFramework.Core
 {
+    /// <summary>What kind of dependency this is. Determines how IsPresent() looks for it.</summary>
     public enum ModDependencyKind
     {
         /// <summary>A file. Look in the mod's Dependencies/ folder first, then mod root, then Managed/.</summary>
@@ -36,6 +50,7 @@ namespace ModFramework.Core
         ManagedAssembly,
     }
 
+    /// <summary>How critical this dependency is. Determines whether the missing-dep dialog is shown.</summary>
     public enum ModDependencySeverity
     {
         /// <summary>Mod cannot run without this. A missing required dep shows a dialog and the mod should bail.</summary>
@@ -88,7 +103,11 @@ namespace ModFramework.Core
     /// <summary>
     /// Dependency verification utilities. All public methods are safe to call from anywhere
     /// in the mod lifecycle (Initialize, OnActivate, etc.) — they never throw.
+    ///
+    /// v6.0: also writes to the framework's audit log so the player can see which
+    /// mods declared which missing dependencies in the in-game "Mod Audit Log" window.
     /// </summary>
+    [ModFrameworkPublicAPI("v6.0", Reason = "Dependency verification")]
     public static class ModDependencies
     {
         private const string Tag = "[ModDependencies]";
@@ -114,11 +133,11 @@ namespace ModFramework.Core
                 if (dep.Severity == ModDependencySeverity.Required)
                 {
                     missing.Add(dep);
-                    Debug.LogWarning($"{Tag} MISSING REQUIRED dep '{dep.Name}' ({dep.Kind}) for mod {SafeModName(parentMod)}");
+                    Debug.LogWarning(Tag + " MISSING REQUIRED dep '" + dep.Name + "' (" + dep.Kind + ") for mod " + SafeModName(parentMod));
                 }
                 else
                 {
-                    Debug.LogWarning($"{Tag} Missing optional dep '{dep.Name}' ({dep.Kind}) for mod {SafeModName(parentMod)} — running with reduced functionality");
+                    Debug.LogWarning(Tag + " Missing optional dep '" + dep.Name + "' (" + dep.Kind + ") for mod " + SafeModName(parentMod) + " — running with reduced functionality");
                 }
             }
             return missing;
@@ -133,19 +152,25 @@ namespace ModFramework.Core
         /// <summary>
         /// Show an in-game error dialog listing the missing required dependencies.
         /// Silently no-ops if the list is empty or the dialog system isn't ready yet.
+        ///
+        /// v6.0: also writes a DIALOG_SHOWN line to the audit log so the player can see
+        /// which mod showed a missing-dep dialog.
         /// </summary>
         public static void ShowMissingMessage(IList<ModDependency> missing, string modTitle = null)
         {
             if (missing == null || missing.Count == 0) return;
             try
             {
-                string title = string.IsNullOrEmpty(modTitle) ? "Mod dependency missing" : $"{modTitle} — dependency missing";
+                string title = string.IsNullOrEmpty(modTitle) ? "Mod dependency missing" : (modTitle + " — dependency missing");
                 string body = BuildMessage(missing, modTitle);
                 WindowManager.SpawnDialog(body, true, DialogWindow.DialogType.Error);
+                // v6.0: audit-log the dialog
+                try { AuditLog.Log("<dialog>", modTitle ?? "<unknown>", "DEP_DIALOG_SHOWN", title, "OK", missing.Count + " missing dep(s)"); }
+                catch { /* AuditLog may not be initialized yet */ }
             }
             catch (Exception ex)
             {
-                Debug.LogError($"{Tag} Could not show missing-dep dialog: {ex}");
+                Debug.LogError(Tag + " Could not show missing-dep dialog: " + ex);
             }
         }
 
@@ -162,6 +187,27 @@ namespace ModFramework.Core
                 ShowMissingMessage(missing, SafeModName(parentMod));
             }
             return missing.Count == 0;
+        }
+
+        /// <summary>
+        /// v6.0.1 convenience overload: <see cref="VerifyOrWarn(ModController.DLLMod, ModDependency[])"/>
+        /// that takes a <see cref="ModIdentity"/> instead of a <see cref="ModController.DLLMod"/>.
+        /// Looks up the registered DLLMod via <see cref="ModRegistry.GetDLLMod(ModIdentity)"/>
+        /// and dispatches to the canonical overload.
+        /// </summary>
+        /// <returns>True if all required deps are present; false if any required dep is missing or the identity is not registered.</returns>
+        [ModFrameworkPublicAPI("v6.0.1", Reason = "Convenience overload for ModIdentity (the v6.0+ handle). Added v6.0.1 to unblock ModFrameworkExample compile.")]
+        public static bool VerifyOrWarn(ModIdentity identity, params ModDependency[] deps)
+        {
+            if (identity == null) return false;
+            var dllMod = ModRegistry.GetDLLMod(identity);
+            if (dllMod == null)
+            {
+                Debug.LogWarning(Tag + " VerifyOrWarn: identity '" + identity.ModId + "' is not registered. " +
+                    "Call ModFrameworkActivator.OnActivate first.");
+                return false;
+            }
+            return VerifyOrWarn(dllMod, deps);
         }
 
         /// <summary>True if this single dependency is present. Never throws.</summary>
@@ -197,7 +243,7 @@ namespace ModFramework.Core
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"{Tag} IsPresent check failed for '{dep.Name}': {ex.Message}");
+                Debug.LogWarning(Tag + " IsPresent check failed for '" + dep.Name + "': " + ex.Message);
                 return false;
             }
         }
@@ -308,7 +354,8 @@ namespace ModFramework.Core
         {
             try
             {
-                return parentMod?.FolderPath();
+                if (parentMod == null) return null;
+                return parentMod.FolderPath();
             }
             catch
             {
@@ -336,7 +383,7 @@ namespace ModFramework.Core
             var sb = new System.Text.StringBuilder();
             if (!string.IsNullOrEmpty(modTitle))
             {
-                sb.AppendLine($"'{modTitle}' could not start because the following required dependencies are missing:");
+                sb.AppendLine("'" + modTitle + "' could not start because the following required dependencies are missing:");
             }
             else
             {
@@ -346,10 +393,11 @@ namespace ModFramework.Core
             int i = 1;
             foreach (var d in missing)
             {
-                sb.AppendLine($"  {i++}. {d.Name} ({d.Kind})");
+                sb.AppendLine("  " + i + ". " + d.Name + " (" + d.Kind + ")");
+                i++;
                 if (!string.IsNullOrEmpty(d.DownloadUrl))
                 {
-                    sb.AppendLine($"     Get it from: {d.DownloadUrl}");
+                    sb.AppendLine("     Get it from: " + d.DownloadUrl);
                 }
             }
             sb.AppendLine();

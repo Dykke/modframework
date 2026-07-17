@@ -10,8 +10,27 @@ using UnityEngine.UI;
 /// <summary>
 /// ModFramework - Reusable utilities for Software Inc modding
 /// Created by: Zicarius
-/// Version: 1.0
-/// 
+/// Version: 6.1.0
+///
+/// v6.0 — Security-focused overhaul. Strong-name signed with public key
+/// token e0967644e3ffec06. Every privileged call now requires a ModIdentity
+/// + the appropriate Permission. See modframework/notes/security-review.md
+/// and cursor-stuff/plans/modframework-security-hardening-v6.md for the
+/// full plan.
+///
+/// v6.1 — Closes the v5.x [Obsolete] back-compat permission bypass:
+///   - The 6 v4.x single-file classes (UIHelper / ModLogger / ModEvents /
+///     Notifications / ModSettings / ModUtils) are now `internal` instead
+///     of `public`. Workshop CS mods that target them now get a CS0122
+///     (inaccessible) compile error. They must pin to ModFramework v6.0.0.
+///   - The 28 v5.x [Obsolete] wrappers in the v6.0 Core/ files
+///     (ModFileAccess 18 + ModHarmony 4 + ModEvents 1 + ModServiceBridge 5)
+///     are deleted. The only way to do file I/O / events / services
+///     through the framework in v6.1+ is via the v6.0 API (ModIdentity +
+///     RequirePermission).
+///   - See cursor-stuff/plans/modframework-v6.1-backlog.md for the full
+///     change set and the Workshop CS mod pin decision.
+///
 /// Copy this file to any mod project for quick access to:
 /// - UI creation helpers
 /// - Logging system
@@ -25,7 +44,8 @@ namespace ModFramework
     /// <summary>
     /// Helper methods for creating UI elements easily
     /// </summary>
-    public static class UIHelper
+    [Obsolete("v6.1: UIHelper is now internal. Workshop CS mods must pin to ModFramework v6.0.0. Nexus DLL mods must migrate to v6.0 Core helpers. Removed in v7.0.", false)]
+    internal static class UIHelper
     {
         // ========== PANELS ==========
         
@@ -409,7 +429,8 @@ namespace ModFramework
     /// <summary>
     /// Enhanced logging system with filtering and formatting
     /// </summary>
-    public static class ModLogger
+    [Obsolete("v6.1: ModLogger is now internal. Workshop CS mods must pin to ModFramework v6.0.0. Nexus DLL mods must migrate to UnityEngine.Debug.Log directly. Removed in v7.0.", false)]
+    internal static class ModLogger
     {
         private static string modPrefix = "[Mod]";
         
@@ -456,7 +477,8 @@ namespace ModFramework
     /// <summary>
     /// Simple event system for mod communication
     /// </summary>
-    public static class ModEvents
+    [Obsolete("v6.1: ModFramework.ModEvents is now internal. Workshop CS mods must pin to ModFramework v6.0.0. Nexus DLL mods must migrate to ModFramework.Core.ModEvents (v6.0 EventKey API). Removed in v7.0.", false)]
+    internal static class ModEvents
     {
         private static Dictionary<string, List<Action<object>>> events = new Dictionary<string, List<Action<object>>>();
 
@@ -508,7 +530,8 @@ namespace ModFramework
     /// <summary>
     /// Easy in-game notification system
     /// </summary>
-    public static class Notifications
+    [Obsolete("v6.1: Notifications is now internal. Workshop CS mods must pin to ModFramework v6.0.0. Nexus DLL mods must call the game's native popup API directly (see v6.0 best practices in DOCUMENTATION.md). Removed in v7.0.", false)]
+    internal static class Notifications
     {
         public static void Show(string message)
         {
@@ -576,7 +599,8 @@ namespace ModFramework
     /// 2026-03: Software Inc security update blocks mods that reference UnityEngine's built-in prefs API.
     /// This implementation persists settings to disk under Application.persistentDataPath instead.
     /// </summary>
-    public static class ModSettings
+    [Obsolete("v6.1: ModSettings is now internal. Workshop CS mods must pin to ModFramework v6.0.0. Nexus DLL mods must migrate to the v6.0 API (per-mod ModIdentity-bound settings via ModFileAccess.WriteJson). Removed in v7.0.", false)]
+    internal static class ModSettings
     {
         private static readonly object _gate = new object();
         private static string _prefix = "Mod";
@@ -593,8 +617,8 @@ namespace ModFramework
             }
         }
 
-        public static void SetBool(string key, bool value) => SetString(key, value ? "1" : "0");
-        public static bool GetBool(string key) => GetBool(key, false);
+        public static void SetBool(string key, bool value) { SetString(key, value ? "1" : "0"); }
+        public static bool GetBool(string key) { return GetBool(key, false); }
         public static bool GetBool(string key, bool defaultValue)
         {
             var s = GetString(key, null);
@@ -605,8 +629,8 @@ namespace ModFramework
             return bool.TryParse(s, out b) ? b : defaultValue;
         }
 
-        public static void SetInt(string key, int value) => SetString(key, value.ToString(CultureInfo.InvariantCulture));
-        public static int GetInt(string key) => GetInt(key, 0);
+        public static void SetInt(string key, int value) { SetString(key, value.ToString(CultureInfo.InvariantCulture)); }
+        public static int GetInt(string key) { return GetInt(key, 0); }
         public static int GetInt(string key, int defaultValue)
         {
             var s = GetString(key, null);
@@ -614,8 +638,8 @@ namespace ModFramework
             return (s != null && int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v)) ? v : defaultValue;
         }
 
-        public static void SetFloat(string key, float value) => SetString(key, value.ToString(CultureInfo.InvariantCulture));
-        public static float GetFloat(string key) => GetFloat(key, 0f);
+        public static void SetFloat(string key, float value) { SetString(key, value.ToString(CultureInfo.InvariantCulture)); }
+        public static float GetFloat(string key) { return GetFloat(key, 0f); }
         public static float GetFloat(string key, float defaultValue)
         {
             var s = GetString(key, null);
@@ -634,7 +658,7 @@ namespace ModFramework
             }
         }
 
-        public static string GetString(string key) => GetString(key, "");
+        public static string GetString(string key) { return GetString(key, ""); }
         public static string GetString(string key, string defaultValue)
         {
             if (string.IsNullOrEmpty(key)) return defaultValue;
@@ -656,7 +680,7 @@ namespace ModFramework
             }
         }
 
-        private static string KeyWithPrefix(string key) => _prefix + "_" + key;
+        private static string KeyWithPrefix(string key) { return _prefix + "_" + key; }
 
         private static void EnsureLoaded()
         {
@@ -776,7 +800,8 @@ namespace ModFramework
     /// <summary>
     /// Common utility functions
     /// </summary>
-    public static class ModUtils
+    [Obsolete("v6.1: ModFramework.ModUtils is now internal. Workshop CS mods must pin to ModFramework v6.0.0. Nexus DLL mods must migrate to ModFramework.Core.ModUtils (FormatCurrency / IsInGame / etc). Removed in v7.0.", false)]
+    internal static class ModUtils
     {
         public static string FormatCurrency(float amount)
         {
