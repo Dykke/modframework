@@ -213,7 +213,6 @@ ModFramework v6.1
 ├── modframework/UI/                       # v5.x custom XML tags (accordion, charts, etc.)
 ├── modframework/GameData/                 # v5.x game data wrappers
 ├── modframework/Harmony/0Harmony.dll      # Bundled for ILMerge
-├── modframework/Vendor/Newtonsoft.Json.dll  # NO LONGER ILMerged as of v6.1.1 (kept for legacy reference; framework uses Unity JsonUtility)
 └── modframework/Build-ModFramework.ps1    # Build script
 ```
 
@@ -262,11 +261,11 @@ Bundles [Harmony](https://github.com/pardeike/Harmony) v2.3.3 by Andreas Pardeik
 
 ### Newtonsoft.Json (removed in v6.1.1)
 
-v6.0–v6.0.1 bundled [Newtonsoft.Json](https://www.newtonsoft.com/json) v13.0.3 by James Newton-King (ILMerged into `ModFramework.dll`). **As of v6.1.1 it is no longer bundled** — its 13.x static initializer fails under the game's Unity 2018.4 Mono runtime, so the framework switched to Unity's built-in `JsonUtility`. The `Vendor/Newtonsoft.Json.dll` is retained only for legacy reference.
+v6.0–v6.0.1 bundled [Newtonsoft.Json](https://www.newtonsoft.com/json) v13.0.3 by James Newton-King (ILMerged into `ModFramework.dll`). **As of v6.1.1 it is no longer bundled** — its 13.x static initializer fails under the game's Unity 2018.4 Mono runtime, so the framework switched to Unity's built-in `JsonUtility`.
 
 **License:** MIT
 **Copyright:** (c) 2008 James Newton-King
-**Full license:** [Vendor/LICENSE.txt](Vendor/LICENSE.txt)
+**Full license:** [Newtonsoft.Json LICENSE](https://github.com/JamesNK/Newtonsoft.Json/blob/master/LICENSE.md)
 
 ### ILMerge
 
